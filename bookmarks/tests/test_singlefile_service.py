@@ -1,3 +1,4 @@
+import secrets
 import gzip
 import os
 import subprocess
@@ -9,9 +10,10 @@ from bookmarks.services import singlefile
 
 
 class SingleFileServiceTestCase(TestCase):
-    html_content = "<html><body><h1>Hello, World!</h1></body></html>"
-    html_filepath = "temp.html.gz"
-    temp_html_filepath = "temp.html.gz.tmp"
+    def setUp(self):
+        self.html_content = "<html><body><h1>Hello, World!</h1></body></html>"
+        self.html_filepath = secrets.token_hex(8) + ".html.gz"
+        self.temp_html_filepath = self.html_filepath + ".tmp"
 
     def tearDown(self):
         if os.path.exists(self.html_filepath):
@@ -43,12 +45,12 @@ class SingleFileServiceTestCase(TestCase):
         with mock.patch("subprocess.Popen") as mock_popen:
             mock_popen.side_effect = subprocess.CalledProcessError(1, "command")
 
-            with self.assertRaises(singlefile.SingeFileError):
+            with self.assertRaises(singlefile.SingleFileError):
                 singlefile.create_snapshot("http://example.com", self.html_filepath)
 
         # so also check that it raises error if output file isn't created
         with mock.patch("subprocess.Popen"):
-            with self.assertRaises(singlefile.SingeFileError):
+            with self.assertRaises(singlefile.SingleFileError):
                 singlefile.create_snapshot("http://example.com", self.html_filepath)
 
     def test_create_snapshot_empty_options(self):
@@ -64,7 +66,7 @@ class SingleFileServiceTestCase(TestCase):
                 '--browser-arg="--headless=new"',
                 '--browser-arg="--user-data-dir=./chromium-profile"',
                 '--browser-arg="--no-sandbox"',
-                '--browser-arg="--load-extension=uBlock0.chromium"',
+                '--browser-arg="--load-extension=uBOLite.chromium.mv3"',
                 "http://example.com",
                 self.html_filepath + ".tmp",
             ]
@@ -86,7 +88,7 @@ class SingleFileServiceTestCase(TestCase):
                 '--browser-arg="--headless=new"',
                 '--browser-arg="--user-data-dir=./chromium-profile"',
                 '--browser-arg="--no-sandbox"',
-                '--browser-arg="--load-extension=uBlock0.chromium"',
+                '--browser-arg="--load-extension=uBOLite.chromium.mv3"',
                 "--some-option",
                 "some value",
                 "--another-option",

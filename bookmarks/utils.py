@@ -1,10 +1,12 @@
 import logging
 import re
 import unicodedata
-from datetime import datetime
+import urllib.parse
+import datetime
 from typing import Optional
 
 from dateutil.relativedelta import relativedelta
+from django.http import HttpResponseRedirect
 from django.template.defaultfilters import pluralize
 from django.utils import timezone, formats
 
@@ -31,7 +33,9 @@ weekday_names = {
 }
 
 
-def humanize_absolute_date(value: datetime, now: Optional[datetime] = None):
+def humanize_absolute_date(
+    value: datetime.datetime, now: Optional[datetime.datetime] = None
+):
     if not now:
         now = timezone.now()
     delta = relativedelta(now, value)
@@ -49,7 +53,9 @@ def humanize_absolute_date(value: datetime, now: Optional[datetime] = None):
         return weekday_names[value.isoweekday()]
 
 
-def humanize_relative_date(value: datetime, now: Optional[datetime] = None):
+def humanize_relative_date(
+    value: datetime.datetime, now: Optional[datetime.datetime] = None
+):
     if not now:
         now = timezone.now()
     delta = relativedelta(now, value)
@@ -85,21 +91,21 @@ def parse_timestamp(value: str):
         raise ValueError(f"{value} is not a valid timestamp")
 
     try:
-        return datetime.utcfromtimestamp(timestamp).astimezone()
+        return datetime.datetime.fromtimestamp(timestamp, datetime.UTC)
     except (OverflowError, ValueError, OSError):
         pass
 
     # Value exceeds the max. allowed timestamp
     # Try parsing as microseconds
     try:
-        return datetime.utcfromtimestamp(timestamp / 1000).astimezone()
+        return datetime.datetime.fromtimestamp(timestamp / 1000, datetime.UTC)
     except (OverflowError, ValueError, OSError):
         pass
 
     # Value exceeds the max. allowed timestamp
     # Try parsing as nanoseconds
     try:
-        return datetime.utcfromtimestamp(timestamp / 1000000).astimezone()
+        return datetime.datetime.fromtimestamp(timestamp / 1000000, datetime.UTC)
     except (OverflowError, ValueError, OSError):
         pass
 
@@ -112,6 +118,14 @@ def get_safe_return_url(return_url: str, fallback_url: str):
     if not return_url or not re.match(r"^/[a-z]+", return_url):
         return fallback_url
     return return_url
+
+
+def redirect_with_query(request, redirect_url):
+    query_string = urllib.parse.urlencode(request.GET)
+    if query_string:
+        redirect_url += "?" + query_string
+
+    return HttpResponseRedirect(redirect_url)
 
 
 def generate_username(email):

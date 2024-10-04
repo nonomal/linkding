@@ -8,12 +8,10 @@ from .base import *
 
 # Turn on debug mode
 DEBUG = True
-# Turn on SASS compilation
-SASS_PROCESSOR_ENABLED = True
 
 # Enable debug toolbar
-INSTALLED_APPS.append("debug_toolbar")
-MIDDLEWARE.append("debug_toolbar.middleware.DebugToolbarMiddleware")
+# INSTALLED_APPS.append("debug_toolbar")
+# MIDDLEWARE.append("debug_toolbar.middleware.DebugToolbarMiddleware")
 
 INTERNAL_IPS = [
     "127.0.0.1",
@@ -21,6 +19,14 @@ INTERNAL_IPS = [
 
 # Allow access through ngrok
 CSRF_TRUSTED_ORIGINS = ["https://*.ngrok-free.app"]
+
+STATICFILES_DIRS = [
+    # Resolve theme files from style source folder
+    os.path.join(BASE_DIR, "bookmarks", "styles"),
+    # Resolve downloaded files in dev environment
+    os.path.join(BASE_DIR, "data", "favicons"),
+    os.path.join(BASE_DIR, "data", "previews"),
+]
 
 # Enable debug logging
 LOGGING = {

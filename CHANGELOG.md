@@ -1,5 +1,100 @@
 # Changelog
 
+## v1.36.0 (02/10/2024)
+
+### What's Changed
+* Replace uBlock Origin with uBlock Origin Lite by @sissbruecker in https://github.com/sissbruecker/linkding/pull/866
+* Add LAST_MODIFIED attribute when exporting by @ixzhao in https://github.com/sissbruecker/linkding/pull/860
+* Return client error status code for invalid form submissions by @sissbruecker in https://github.com/sissbruecker/linkding/pull/849
+* Fix header.svg text by @vladh in https://github.com/sissbruecker/linkding/pull/850
+* Do not clear fields in POST requests (API behavior change) by @sissbruecker in https://github.com/sissbruecker/linkding/pull/852
+* Prevent duplicates when editing by @sissbruecker in https://github.com/sissbruecker/linkding/pull/853
+* Fix jumping details modal on back navigation by @sissbruecker in https://github.com/sissbruecker/linkding/pull/854
+* Fix select dropdown menu background in dark theme by @sissbruecker in https://github.com/sissbruecker/linkding/pull/858
+* Do not escape valid characters in custom CSS by @sissbruecker in https://github.com/sissbruecker/linkding/pull/863
+* Simplify Docker build by @sissbruecker in https://github.com/sissbruecker/linkding/pull/865
+* Improve error handling for auto tagging by @sissbruecker in https://github.com/sissbruecker/linkding/pull/855
+* Bump rollup from 4.13.0 to 4.22.4 by @dependabot in https://github.com/sissbruecker/linkding/pull/851
+* Bump rollup from 4.21.3 to 4.22.4 in /docs by @dependabot in https://github.com/sissbruecker/linkding/pull/856
+
+### New Contributors
+* @vladh made their first contribution in https://github.com/sissbruecker/linkding/pull/850
+* @ixzhao made their first contribution in https://github.com/sissbruecker/linkding/pull/860
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.35.0...v1.36.0
+
+---
+
+## v1.35.0 (23/09/2024)
+
+### What's Changed
+* Add configuration options for pagination by @sissbruecker in https://github.com/sissbruecker/linkding/pull/835
+* Show placeholder if there is no preview image by @sissbruecker in https://github.com/sissbruecker/linkding/pull/842
+* Allow bookmarks to have empty title and description by @sissbruecker in https://github.com/sissbruecker/linkding/pull/843
+* Add clear buttons in bookmark form by @sissbruecker in https://github.com/sissbruecker/linkding/pull/846
+* Add basic fail2ban support by @sissbruecker in https://github.com/sissbruecker/linkding/pull/847
+* Add documentation website by @sissbruecker in https://github.com/sissbruecker/linkding/pull/833
+* Add go-linkding to community projects by @piero-vic in https://github.com/sissbruecker/linkding/pull/836
+* Fix a broken link to options documentation by @zbrox in https://github.com/sissbruecker/linkding/pull/844
+* Use HTTPS repository link for devcontainer by @voltagex in https://github.com/sissbruecker/linkding/pull/837
+* Bump requests version to 3.23.3 by @voltagex in https://github.com/sissbruecker/linkding/pull/839
+* Bump path-to-regexp and astro in /docs by @dependabot in https://github.com/sissbruecker/linkding/pull/840
+* Bump dependencies by @sissbruecker in https://github.com/sissbruecker/linkding/pull/841
+
+### New Contributors
+* @piero-vic made their first contribution in https://github.com/sissbruecker/linkding/pull/836
+* @voltagex made their first contribution in https://github.com/sissbruecker/linkding/pull/839
+* @zbrox made their first contribution in https://github.com/sissbruecker/linkding/pull/844
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.34.0...v1.35.0
+
+---
+
+## v1.34.0 (16/09/2024)
+
+### What's Changed
+* Fix several issues around browser back navigation by @sissbruecker in https://github.com/sissbruecker/linkding/pull/825
+* Speed up response times for certain actions by @sissbruecker in https://github.com/sissbruecker/linkding/pull/829
+* Implement IPv6 capability by @itz-Jana in https://github.com/sissbruecker/linkding/pull/826
+
+### New Contributors
+* @itz-Jana made their first contribution in https://github.com/sissbruecker/linkding/pull/826
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.33.0...v1.34.0
+
+---
+
+## v1.33.0 (14/09/2024)
+
+### What's Changed
+* Theme improvements by @sissbruecker in https://github.com/sissbruecker/linkding/pull/822
+* Speed up navigation by @sissbruecker in https://github.com/sissbruecker/linkding/pull/824
+* Rename "SingeFileError" to "SingleFileError" by @curiousleo in https://github.com/sissbruecker/linkding/pull/823
+* Bump svelte from 4.2.12 to 4.2.19 by @dependabot in https://github.com/sissbruecker/linkding/pull/806
+
+### New Contributors
+* @curiousleo made their first contribution in https://github.com/sissbruecker/linkding/pull/823
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.32.0...v1.33.0
+
+---
+
+## v1.32.0 (10/09/2024)
+
+### What's Changed
+* Allow configuring landing page for unauthenticated users by @sissbruecker in https://github.com/sissbruecker/linkding/pull/808
+* Allow configuring guest user profile by @sissbruecker in https://github.com/sissbruecker/linkding/pull/809
+* Return bookmark tags in RSS feeds by @sissbruecker in https://github.com/sissbruecker/linkding/pull/810
+* Additional filter parameters for RSS feeds by @sissbruecker in https://github.com/sissbruecker/linkding/pull/811
+* Allow pre-filling notes in new bookmark form by @sissbruecker in https://github.com/sissbruecker/linkding/pull/812
+* Fix inconsistent tag order in bookmarks by @sissbruecker in https://github.com/sissbruecker/linkding/pull/819
+* Fix auto-tagging when URL includes port by @sissbruecker in https://github.com/sissbruecker/linkding/pull/820
+
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.31.1...v1.32.0
+
+---
+
 ## v1.31.1 (30/08/2024)
 
 ### What's Changed

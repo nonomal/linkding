@@ -39,7 +39,6 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "sass_processor",
     "widget_tweaks",
     "rest_framework",
     "rest_framework.authtoken",
@@ -53,7 +52,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "bookmarks.middlewares.UserProfileMiddleware",
+    "bookmarks.middlewares.LinkdingMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "django.middleware.locale.LocaleMiddleware",
@@ -128,23 +127,6 @@ STATIC_URL = "/" + LD_CONTEXT_PATH + "static/"
 
 # Collect static files in static folder
 STATIC_ROOT = os.path.join(BASE_DIR, "static")
-
-# Turn off SASS compilation by default
-SASS_PROCESSOR_ENABLED = False
-
-# Add SASS preprocessor finder to resolve generated CSS
-STATICFILES_FINDERS = [
-    "django.contrib.staticfiles.finders.FileSystemFinder",
-    "django.contrib.staticfiles.finders.AppDirectoriesFinder",
-    "sass_processor.finders.CssFinder",
-]
-
-# Enable SASS processor to find custom folder for SCSS sources through static file finders
-STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, "bookmarks", "styles"),
-    os.path.join(BASE_DIR, "data", "favicons"),
-    os.path.join(BASE_DIR, "data", "previews"),
-]
 
 # REST framework
 REST_FRAMEWORK = {
@@ -314,7 +296,7 @@ LD_SINGLEFILE_UBLOCK_OPTIONS = os.getenv(
             '--browser-arg="--headless=new"',
             '--browser-arg="--user-data-dir=./chromium-profile"',
             '--browser-arg="--no-sandbox"',
-            '--browser-arg="--load-extension=uBlock0.chromium"',
+            '--browser-arg="--load-extension=uBOLite.chromium.mv3"',
         ]
     ),
 )
