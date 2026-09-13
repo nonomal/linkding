@@ -7,7 +7,8 @@ from django.http import HttpRequest
 from django.urls import reverse
 
 from bookmarks import queries
-from bookmarks.models import Bookmark, BookmarkSearch, FeedToken, UserProfile
+from bookmarks.models import Bookmark, BookmarkSearch, FeedToken, User, UserProfile
+from bookmarks.views import access
 
 
 @dataclass
@@ -15,6 +16,10 @@ class FeedContext:
     request: HttpRequest
     feed_token: FeedToken | None
     query_set: QuerySet[Bookmark]
+
+
+def resolve_user(search: BookmarkSearch) -> User | None:
+    return User.objects.filter(username=search.user).first() if search.user else None
 
 
 def sanitize(text: str):
@@ -30,10 +35,17 @@ def sanitize(text: str):
 class BaseBookmarksFeed(Feed):
     def get_object(self, request, feed_key: str | None):
         feed_token = FeedToken.objects.get(key__exact=feed_key) if feed_key else None
+        bundle = None
+        bundle_id = request.GET.get("bundle")
+        if bundle_id:
+            bundle = access.bundle_read(request, bundle_id)
+
         search = BookmarkSearch(
             q=request.GET.get("q", ""),
+            user=request.GET.get("user", ""),
             unread=request.GET.get("unread", ""),
             shared=request.GET.get("shared", ""),
+            bundle=bundle,
         )
         query_set = self.get_query_set(feed_token, search)
         return FeedContext(request, feed_token, query_set)
@@ -43,10 +55,7 @@ class BaseBookmarksFeed(Feed):
 
     def items(self, context: FeedContext):
         limit = context.request.GET.get("limit", 100)
-        if limit:
-            data = context.query_set[: int(limit)]
-        else:
-            data = list(context.query_set)
+        data = context.query_set[: int(limit)] if limit else list(context.query_set)
         prefetch_related_objects(data, "tags")
         return data
 
@@ -74,7 +83,7 @@ class AllBookmarksFeed(BaseBookmarksFeed):
         return queries.query_bookmarks(feed_token.user, feed_token.user.profile, search)
 
     def link(self, context: FeedContext):
-        return reverse("bookmarks:feeds.all", args=[context.feed_token.key])
+        return reverse("linkding:feeds.all", args=[context.feed_token.key])
 
 
 class UnreadBookmarksFeed(BaseBookmarksFeed):
@@ -87,7 +96,7 @@ class UnreadBookmarksFeed(BaseBookmarksFeed):
         ).filter(unread=True)
 
     def link(self, context: FeedContext):
-        return reverse("bookmarks:feeds.unread", args=[context.feed_token.key])
+        return reverse("linkding:feeds.unread", args=[context.feed_token.key])
 
 
 class SharedBookmarksFeed(BaseBookmarksFeed):
@@ -95,12 +104,15 @@ class SharedBookmarksFeed(BaseBookmarksFeed):
     description = "All shared bookmarks"
 
     def get_query_set(self, feed_token: FeedToken, search: BookmarkSearch):
+        user = resolve_user(search)
+        if search.user and not user:
+            return Bookmark.objects.none()
         return queries.query_shared_bookmarks(
-            None, feed_token.user.profile, search, False
+            user, feed_token.user.profile, search, False
         )
 
     def link(self, context: FeedContext):
-        return reverse("bookmarks:feeds.shared", args=[context.feed_token.key])
+        return reverse("linkding:feeds.shared", args=[context.feed_token.key])
 
 
 class PublicSharedBookmarksFeed(BaseBookmarksFeed):
@@ -111,7 +123,10 @@ class PublicSharedBookmarksFeed(BaseBookmarksFeed):
         return super().get_object(request, None)
 
     def get_query_set(self, feed_token: FeedToken, search: BookmarkSearch):
-        return queries.query_shared_bookmarks(None, UserProfile(), search, True)
+        user = resolve_user(search)
+        if search.user and not user:
+            return Bookmark.objects.none()
+        return queries.query_shared_bookmarks(user, UserProfile(), search, True)
 
     def link(self, context: FeedContext):
-        return reverse("bookmarks:feeds.public_shared")
+        return reverse("linkding:feeds.public_shared")

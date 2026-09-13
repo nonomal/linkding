@@ -1,13 +1,16 @@
+import base64
 import re
 
 import bleach
 import markdown
-from bleach_allowlist import markdown_tags, markdown_attrs
+from bleach.linkifier import DEFAULT_CALLBACKS, Linker
+from bleach_allowlist import markdown_attrs, markdown_tags
 from django import template
+from django.forms.models import model_to_dict
 from django.utils.safestring import mark_safe
 
 from bookmarks import utils
-from bookmarks.models import UserProfile
+from bookmarks.widgets import FormCheckbox
 
 register = template.Library()
 
@@ -24,48 +27,6 @@ def update_query_string(context, **kwargs):
 
 
 @register.simple_tag(takes_context=True)
-def add_tag_to_query(context, tag_name: str):
-    params = context.request.GET.copy()
-
-    # Append to or create query string
-    if params.__contains__("q"):
-        query_string = params.__getitem__("q") + " "
-    else:
-        query_string = ""
-    query_string = query_string + "#" + tag_name
-    params.__setitem__("q", query_string)
-
-    return params.urlencode()
-
-
-@register.simple_tag(takes_context=True)
-def remove_tag_from_query(context, tag_name: str):
-    params = context.request.GET.copy()
-    if params.__contains__("q"):
-        # Split query string into parts
-        query_string = params.__getitem__("q")
-        query_parts = query_string.split()
-        # Remove tag with hash
-        tag_name_with_hash = "#" + tag_name
-        query_parts = [
-            part
-            for part in query_parts
-            if str.lower(part) != str.lower(tag_name_with_hash)
-        ]
-        # When using lax tag search, also remove tag without hash
-        profile = context.request.user_profile
-        if profile.tag_search == UserProfile.TAG_SEARCH_LAX:
-            query_parts = [
-                part for part in query_parts if str.lower(part) != str.lower(tag_name)
-            ]
-        # Rebuild query string
-        query_string = " ".join(query_parts)
-        params.__setitem__("q", query_string)
-
-    return params.urlencode()
-
-
-@register.simple_tag(takes_context=True)
 def replace_query_param(context, **kwargs):
     query = context.request.GET.copy()
 
@@ -75,11 +36,6 @@ def replace_query_param(context, **kwargs):
         query.__setitem__(key, value)
 
     return query.urlencode()
-
-
-@register.filter(name="hash_tag")
-def hash_tag(tag_name):
-    return "#" + tag_name
 
 
 @register.filter(name="first_char")
@@ -106,6 +62,18 @@ def humanize_relative_date(value):
     return utils.humanize_relative_date(value)
 
 
+@register.filter(name="css_data_url")
+def css_data_url(css):
+    encoded = base64.b64encode(css.encode("utf-8")).decode("ascii")
+    return f"data:text/css;charset=utf-8;base64,{encoded}"
+
+
+@register.filter(name="model_to_dict")
+def model_to_dict_filter(value):
+    result = model_to_dict(value)
+    return result
+
+
 @register.tag
 def htmlmin(parser, token):
     nodelist = parser.parse(("endhtmlmin",))
@@ -125,11 +93,27 @@ class HtmlMinNode(template.Node):
         return output
 
 
+def schemeless_urls_to_https(attrs, _new):
+    href_key = (None, "href")
+    if href_key not in attrs:
+        return attrs
+
+    if attrs.get("_text", "").startswith("http://"):
+        # The original text explicitly specifies http://, so keep it
+        return attrs
+
+    attrs[href_key] = re.sub(r"^http://", "https://", attrs[href_key])
+    return attrs
+
+
+linker = Linker(callbacks=[*DEFAULT_CALLBACKS, schemeless_urls_to_https])
+
+
 @register.simple_tag(name="markdown", takes_context=True)
 def render_markdown(context, markdown_text):
     # naive approach to reusing the renderer for a single request
     # works for bookmark list for now
-    if not ("markdown_renderer" in context):
+    if "markdown_renderer" not in context:
         renderer = markdown.Markdown(extensions=["fenced_code", "nl2br"])
         context["markdown_renderer"] = renderer
     else:
@@ -137,5 +121,73 @@ def render_markdown(context, markdown_text):
 
     as_html = renderer.convert(markdown_text)
     sanitized_html = bleach.clean(as_html, markdown_tags, markdown_attrs)
+    linkified_html = linker.linkify(sanitized_html)
 
-    return mark_safe(sanitized_html)
+    return mark_safe(linkified_html)
+
+
+def append_attr(widget, attr, value):
+    attrs = widget.attrs
+    if attrs.get(attr):
+        attrs[attr] += " " + value
+    else:
+        attrs[attr] = value
+
+
+@register.simple_tag
+def formlabel(field, label_text):
+    return mark_safe(
+        f'<label for="{field.id_for_label}" class="form-label">{label_text}</label>'
+    )
+
+
+@register.simple_tag
+def formfield(field, **kwargs):
+    widget = field.field.widget
+
+    label = kwargs.pop("label", None)
+    if label and isinstance(widget, FormCheckbox):
+        widget.label = label
+
+    if kwargs.pop("has_help", False):
+        append_attr(widget, "aria-describedby", field.auto_id + "_help")
+
+    has_errors = hasattr(field, "errors") and field.errors
+    if has_errors:
+        append_attr(widget, "class", "is-error")
+        append_attr(widget, "aria-describedby", field.auto_id + "_error")
+    if field.field.required and not has_errors:
+        append_attr(widget, "aria-invalid", "false")
+
+    for attr, value in kwargs.items():
+        attr = attr.replace("_", "-")
+        if attr == "class":
+            append_attr(widget, "class", value)
+        else:
+            widget.attrs[attr] = value
+
+    return field.as_widget()
+
+
+@register.tag
+def formhelp(parser, token):
+    try:
+        tag_name, field_var = token.split_contents()
+    except ValueError:
+        raise template.TemplateSyntaxError(
+            f"{token.contents.split()[0]!r} tag requires a single argument (form field)"
+        ) from None
+    nodelist = parser.parse(("endformhelp",))
+    parser.delete_first_token()
+    return FormHelpNode(nodelist, field_var)
+
+
+class FormHelpNode(template.Node):
+    def __init__(self, nodelist, field_var):
+        self.nodelist = nodelist
+        self.field_var = template.Variable(field_var)
+
+    def render(self, context):
+        field = self.field_var.resolve(context)
+        content = self.nodelist.render(context)
+        return f'<div id="{field.auto_id}_help" class="form-input-hint">{content}</div>'

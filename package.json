@@ -1,33 +1,19 @@
 {
   "name": "linkding",
-  "version": "1.32.0",
-  "description": "",
-  "main": "index.js",
   "scripts": {
-    "build": "rollup -c",
-    "dev": "rollup -c -w"
+    "build": "npm run build-js && npm run build-theme-light && npm run build-theme-dark",
+    "build-js": "esbuild bookmarks/frontend/index.js --bundle --minify --sourcemap --format=iife --outfile=bookmarks/static/bundle.js",
+    "build-theme-light": "esbuild bookmarks/styles/theme-light.css --bundle --minify --external:*.svg --target=chrome109,firefox115,safari16 --outfile=bookmarks/static/theme-light.css",
+    "build-theme-dark": "esbuild bookmarks/styles/theme-dark.css --bundle --minify --external:*.svg --target=chrome109,firefox115,safari16 --outfile=bookmarks/static/theme-dark.css",
+    "dev": "esbuild bookmarks/frontend/dev.js --bundle --sourcemap --format=iife --outfile=bookmarks/static/bundle.js --watch"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/sissbruecker/linkding.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/sissbruecker/linkding/issues"
-  },
-  "homepage": "https://github.com/sissbruecker/linkding#readme",
   "dependencies": {
-    "@rollup/plugin-node-resolve": "^15.2.3",
-    "@rollup/plugin-terser": "^0.4.4",
-    "@rollup/wasm-node": "^4.13.0",
-    "rollup-plugin-svelte": "^7.2.0",
-    "spectre.css": "^0.5.8",
-    "svelte": "^4.0.0"
+    "@floating-ui/dom": "^1.7.4",
+    "@hotwired/turbo": "^8.0.21",
+    "esbuild": "^0.28.2",
+    "lit": "^3.3.1"
   },
   "devDependencies": {
-    "prettier": "^3.0.2"
-  },
-  "web-types": "./web-types.json"
+    "prettier": "^3.3.3"
+  }
 }

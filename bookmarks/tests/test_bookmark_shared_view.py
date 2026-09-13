@@ -1,16 +1,20 @@
 import urllib.parse
-from typing import List
 
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from bookmarks.models import Bookmark, BookmarkSearch, Tag, UserProfile
-from bookmarks.tests.helpers import BookmarkFactoryMixin, HtmlTestMixin
+from bookmarks.models import Bookmark, BookmarkSearch, UserProfile
+from bookmarks.tests.helpers import (
+    BookmarkFactoryMixin,
+    BookmarkListTestMixin,
+    TagCloudTestMixin,
+)
 
 
-class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
-
+class BookmarkSharedViewTestCase(
+    TestCase, BookmarkFactoryMixin, BookmarkListTestMixin, TagCloudTestMixin
+):
     def authenticate(self) -> None:
         user = self.get_or_create_test_user()
         self.client.force_login(user)
@@ -24,58 +28,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
             count=count,
         )
 
-    def assertVisibleBookmarks(
-        self, response, bookmarks: List[Bookmark], link_target: str = "_blank"
-    ):
-        soup = self.make_soup(response.content.decode())
-        bookmark_list = soup.select_one(
-            f'ul.bookmark-list[data-bookmarks-total="{len(bookmarks)}"]'
-        )
-        self.assertIsNotNone(bookmark_list)
-
-        bookmark_items = bookmark_list.select("li[ld-bookmark-item]")
-        self.assertEqual(len(bookmark_items), len(bookmarks))
-
-        for bookmark in bookmarks:
-            bookmark_item = bookmark_list.select_one(
-                f'li[ld-bookmark-item] a[href="{bookmark.url}"][target="{link_target}"]'
-            )
-            self.assertIsNotNone(bookmark_item)
-
-    def assertInvisibleBookmarks(
-        self, response, bookmarks: List[Bookmark], link_target: str = "_blank"
-    ):
-        soup = self.make_soup(response.content.decode())
-
-        for bookmark in bookmarks:
-            bookmark_item = soup.select_one(
-                f'li[ld-bookmark-item] a[href="{bookmark.url}"][target="{link_target}"]'
-            )
-            self.assertIsNone(bookmark_item)
-
-    def assertVisibleTags(self, response, tags: List[Tag]):
-        soup = self.make_soup(response.content.decode())
-        tag_cloud = soup.select_one("div.tag-cloud")
-        self.assertIsNotNone(tag_cloud)
-
-        tag_items = tag_cloud.select("a[data-is-tag-item]")
-        self.assertEqual(len(tag_items), len(tags))
-
-        tag_item_names = [tag_item.text.strip() for tag_item in tag_items]
-
-        for tag in tags:
-            self.assertTrue(tag.name in tag_item_names)
-
-    def assertInvisibleTags(self, response, tags: List[Tag]):
-        soup = self.make_soup(response.content.decode())
-        tag_items = soup.select("a[data-is-tag-item]")
-
-        tag_item_names = [tag_item.text.strip() for tag_item in tag_items]
-
-        for tag in tags:
-            self.assertFalse(tag.name in tag_item_names)
-
-    def assertVisibleUserOptions(self, response, users: List[User]):
+    def assertVisibleUserOptions(self, response, users: list[User]):
         html = response.content.decode()
 
         user_options = ['<option value="" selected="">Everyone</option>']
@@ -84,8 +37,8 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
                 f'<option value="{user.username}">{user.username}</option>'
             )
         user_select_html = f"""
-        <select name="user" class="form-select" required="" id="id_user">
-            {''.join(user_options)}
+        <select name="user" class="form-select" id="id_user" data-submit-on-change>
+            {"".join(user_options)}
         </select>
         """
 
@@ -121,7 +74,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
             self.setup_bookmark(shared=True, user=user4),
         ]
 
-        response = self.client.get(reverse("bookmarks:shared"))
+        response = self.client.get(reverse("linkding:bookmarks.shared"))
 
         self.assertVisibleBookmarks(response, visible_bookmarks)
         self.assertInvisibleBookmarks(response, invisible_bookmarks)
@@ -140,7 +93,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
             self.setup_bookmark(shared=True, user=user3),
         ]
 
-        url = reverse("bookmarks:shared") + "?user=" + user1.username
+        url = reverse("linkding:bookmarks.shared") + "?user=" + user1.username
         response = self.client.get(url)
 
         self.assertVisibleBookmarks(response, visible_bookmarks)
@@ -155,7 +108,25 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         )
         invisible_bookmarks = self.setup_numbered_bookmarks(3, shared=True, user=user)
 
-        response = self.client.get(reverse("bookmarks:shared") + "?q=foo")
+        response = self.client.get(reverse("linkding:bookmarks.shared") + "?q=foo")
+
+        self.assertVisibleBookmarks(response, visible_bookmarks)
+        self.assertInvisibleBookmarks(response, invisible_bookmarks)
+
+    def test_should_list_bookmarks_matching_bundle(self):
+        self.authenticate()
+        user = self.setup_user(enable_sharing=True)
+
+        visible_bookmarks = self.setup_numbered_bookmarks(
+            3, shared=True, user=user, prefix="foo"
+        )
+        invisible_bookmarks = self.setup_numbered_bookmarks(3, shared=True, user=user)
+
+        bundle = self.setup_bundle(search="foo")
+
+        response = self.client.get(
+            reverse("linkding:bookmarks.shared") + f"?bundle={bundle.id}"
+        )
 
         self.assertVisibleBookmarks(response, visible_bookmarks)
         self.assertInvisibleBookmarks(response, invisible_bookmarks)
@@ -171,7 +142,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
             3, shared=True, user=user2, prefix="user2"
         )
 
-        response = self.client.get(reverse("bookmarks:shared"))
+        response = self.client.get(reverse("linkding:bookmarks.shared"))
 
         self.assertVisibleBookmarks(response, visible_bookmarks)
         self.assertInvisibleBookmarks(response, invisible_bookmarks)
@@ -205,7 +176,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         self.setup_bookmark(shared=False, user=user3, tags=[invisible_tags[2]])
         self.setup_bookmark(shared=True, user=user4, tags=[invisible_tags[3]])
 
-        response = self.client.get(reverse("bookmarks:shared"))
+        response = self.client.get(reverse("linkding:bookmarks.shared"))
 
         self.assertVisibleTags(response, visible_tags)
         self.assertInvisibleTags(response, invisible_tags)
@@ -227,7 +198,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         self.setup_bookmark(shared=True, user=user2, tags=[invisible_tags[0]])
         self.setup_bookmark(shared=True, user=user3, tags=[invisible_tags[1]])
 
-        url = reverse("bookmarks:shared") + "?user=" + user1.username
+        url = reverse("linkding:bookmarks.shared") + "?user=" + user1.username
         response = self.client.get(url)
 
         self.assertVisibleTags(response, visible_tags)
@@ -263,7 +234,48 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         self.setup_bookmark(shared=True, user=user2, tags=[invisible_tags[1]])
         self.setup_bookmark(shared=True, user=user3, tags=[invisible_tags[2]])
 
-        response = self.client.get(reverse("bookmarks:shared") + "?q=searchvalue")
+        response = self.client.get(
+            reverse("linkding:bookmarks.shared") + "?q=searchvalue"
+        )
+
+        self.assertVisibleTags(response, visible_tags)
+        self.assertInvisibleTags(response, invisible_tags)
+
+    def test_should_list_tags_for_bookmarks_matching_bundle(self):
+        self.authenticate()
+        user1 = self.setup_user(enable_sharing=True)
+        user2 = self.setup_user(enable_sharing=True)
+        user3 = self.setup_user(enable_sharing=True)
+        visible_tags = [
+            self.setup_tag(user=user1),
+            self.setup_tag(user=user2),
+            self.setup_tag(user=user3),
+        ]
+        invisible_tags = [
+            self.setup_tag(user=user1),
+            self.setup_tag(user=user2),
+            self.setup_tag(user=user3),
+        ]
+
+        self.setup_bookmark(
+            shared=True, user=user1, title="searchvalue", tags=[visible_tags[0]]
+        )
+        self.setup_bookmark(
+            shared=True, user=user2, title="searchvalue", tags=[visible_tags[1]]
+        )
+        self.setup_bookmark(
+            shared=True, user=user3, title="searchvalue", tags=[visible_tags[2]]
+        )
+
+        self.setup_bookmark(shared=True, user=user1, tags=[invisible_tags[0]])
+        self.setup_bookmark(shared=True, user=user2, tags=[invisible_tags[1]])
+        self.setup_bookmark(shared=True, user=user3, tags=[invisible_tags[2]])
+
+        bundle = self.setup_bundle(search="searchvalue")
+
+        response = self.client.get(
+            reverse("linkding:bookmarks.shared") + f"?bundle={bundle.id}"
+        )
 
         self.assertVisibleTags(response, visible_tags)
         self.assertInvisibleTags(response, invisible_tags)
@@ -287,7 +299,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         self.setup_bookmark(shared=True, user=user2, tags=[invisible_tags[0]])
         self.setup_bookmark(shared=True, user=user2, tags=[invisible_tags[1]])
 
-        response = self.client.get(reverse("bookmarks:shared"))
+        response = self.client.get(reverse("linkding:bookmarks.shared"))
 
         self.assertVisibleTags(response, visible_tags)
         self.assertInvisibleTags(response, invisible_tags)
@@ -304,7 +316,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         self.setup_bookmark(shared=False, user=self.setup_user(enable_sharing=True))
         self.setup_bookmark(shared=True, user=self.setup_user(enable_sharing=False))
 
-        response = self.client.get(reverse("bookmarks:shared"))
+        response = self.client.get(reverse("linkding:bookmarks.shared"))
         self.assertVisibleUserOptions(response, expected_visible_users)
 
     def test_should_list_only_users_with_publicly_shared_bookmarks_without_login(self):
@@ -324,7 +336,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         self.setup_bookmark(shared=True, user=self.setup_user(enable_sharing=True))
         self.setup_bookmark(shared=True, user=self.setup_user(enable_sharing=True))
 
-        response = self.client.get(reverse("bookmarks:shared"))
+        response = self.client.get(reverse("linkding:bookmarks.shared"))
         self.assertVisibleUserOptions(response, expected_visible_users)
 
     def test_should_list_bookmarks_and_tags_for_search_preferences(self):
@@ -359,7 +371,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         unread_tags = self.get_tags_from_bookmarks(unread_bookmarks)
         read_tags = self.get_tags_from_bookmarks(read_bookmarks)
 
-        response = self.client.get(reverse("bookmarks:shared"))
+        response = self.client.get(reverse("linkding:bookmarks.shared"))
         self.assertVisibleBookmarks(response, unread_bookmarks)
         self.assertInvisibleBookmarks(response, read_bookmarks)
         self.assertVisibleTags(response, unread_tags)
@@ -376,7 +388,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
             self.setup_bookmark(shared=True),
         ]
 
-        response = self.client.get(reverse("bookmarks:shared"))
+        response = self.client.get(reverse("linkding:bookmarks.shared"))
 
         self.assertVisibleBookmarks(response, visible_bookmarks, "_blank")
 
@@ -393,7 +405,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
             self.setup_bookmark(shared=True),
         ]
 
-        response = self.client.get(reverse("bookmarks:shared"))
+        response = self.client.get(reverse("linkding:bookmarks.shared"))
 
         self.assertVisibleBookmarks(response, visible_bookmarks, "_self")
 
@@ -404,8 +416,8 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         user.profile.save()
 
         bookmark = self.setup_bookmark(title="foo", shared=True, user=user)
-        edit_url = reverse("bookmarks:edit", args=[bookmark.id])
-        base_url = reverse("bookmarks:shared")
+        edit_url = reverse("linkding:bookmarks.edit", args=[bookmark.id])
+        base_url = reverse("linkding:bookmarks.shared")
 
         # without query params
         return_url = urllib.parse.quote(base_url)
@@ -440,13 +452,13 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
 
     def test_apply_search_preferences(self):
         # no params
-        response = self.client.post(reverse("bookmarks:shared"))
+        response = self.client.post(reverse("linkding:bookmarks.shared"))
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("bookmarks:shared"))
+        self.assertEqual(response.url, reverse("linkding:bookmarks.shared"))
 
         # some params
         response = self.client.post(
-            reverse("bookmarks:shared"),
+            reverse("linkding:bookmarks.shared"),
             {
                 "q": "foo",
                 "sort": BookmarkSearch.SORT_TITLE_ASC,
@@ -454,12 +466,12 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
-            response.url, reverse("bookmarks:shared") + "?q=foo&sort=title_asc"
+            response.url, reverse("linkding:bookmarks.shared") + "?q=foo&sort=title_asc"
         )
 
         # params with default value are removed
         response = self.client.post(
-            reverse("bookmarks:shared"),
+            reverse("linkding:bookmarks.shared"),
             {
                 "q": "foo",
                 "user": "",
@@ -470,12 +482,12 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
-            response.url, reverse("bookmarks:shared") + "?q=foo&unread=yes"
+            response.url, reverse("linkding:bookmarks.shared") + "?q=foo&unread=yes"
         )
 
         # page is removed
         response = self.client.post(
-            reverse("bookmarks:shared"),
+            reverse("linkding:bookmarks.shared"),
             {
                 "q": "foo",
                 "page": "2",
@@ -484,7 +496,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
-            response.url, reverse("bookmarks:shared") + "?q=foo&sort=title_asc"
+            response.url, reverse("linkding:bookmarks.shared") + "?q=foo&sort=title_asc"
         )
 
     def test_save_search_preferences(self):
@@ -493,7 +505,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
 
         # no params
         self.client.post(
-            reverse("bookmarks:shared"),
+            reverse("linkding:bookmarks.shared"),
             {
                 "save": "",
             },
@@ -510,7 +522,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
 
         # with param
         self.client.post(
-            reverse("bookmarks:shared"),
+            reverse("linkding:bookmarks.shared"),
             {
                 "save": "",
                 "sort": BookmarkSearch.SORT_TITLE_ASC,
@@ -528,7 +540,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
 
         # add a param
         self.client.post(
-            reverse("bookmarks:shared"),
+            reverse("linkding:bookmarks.shared"),
             {
                 "save": "",
                 "sort": BookmarkSearch.SORT_TITLE_ASC,
@@ -547,7 +559,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
 
         # remove a param
         self.client.post(
-            reverse("bookmarks:shared"),
+            reverse("linkding:bookmarks.shared"),
             {
                 "save": "",
                 "unread": BookmarkSearch.FILTER_UNREAD_YES,
@@ -565,7 +577,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
 
         # ignores non-preferences
         self.client.post(
-            reverse("bookmarks:shared"),
+            reverse("linkding:bookmarks.shared"),
             {
                 "save": "",
                 "q": "foo",
@@ -585,7 +597,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         )
 
     def test_url_encode_bookmark_actions_url(self):
-        url = reverse("bookmarks:shared") + "?q=%23foo"
+        url = reverse("linkding:bookmarks.shared") + "?q=%23foo"
         response = self.client.get(url)
         html = response.content.decode()
         soup = self.make_soup(html)
@@ -593,7 +605,7 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
 
         self.assertEqual(
             actions_form.attrs["action"],
-            "/bookmarks/shared/action?q=%23foo&return_url=%2Fbookmarks%2Fshared%3Fq%3D%2523foo",
+            "/bookmarks/shared/action?q=%23foo",
         )
 
     def test_encode_search_params(self):
@@ -603,27 +615,65 @@ class BookmarkSharedViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         user.profile.save()
         bookmark = self.setup_bookmark(description="alert('xss')", shared=True)
 
-        url = reverse("bookmarks:shared") + "?q=alert(%27xss%27)"
+        url = reverse("linkding:bookmarks.shared") + "?q=alert(%27xss%27)"
         response = self.client.get(url)
         self.assertNotContains(response, "alert('xss')")
         self.assertContains(response, bookmark.url)
 
-        url = reverse("bookmarks:shared") + "?sort=alert(%27xss%27)"
+        url = reverse("linkding:bookmarks.shared") + "?sort=alert(%27xss%27)"
         response = self.client.get(url)
         self.assertNotContains(response, "alert('xss')")
 
-        url = reverse("bookmarks:shared") + "?unread=alert(%27xss%27)"
+        url = reverse("linkding:bookmarks.shared") + "?unread=alert(%27xss%27)"
         response = self.client.get(url)
         self.assertNotContains(response, "alert('xss')")
 
-        url = reverse("bookmarks:shared") + "?shared=alert(%27xss%27)"
+        url = reverse("linkding:bookmarks.shared") + "?shared=alert(%27xss%27)"
         response = self.client.get(url)
         self.assertNotContains(response, "alert('xss')")
 
-        url = reverse("bookmarks:shared") + "?user=alert(%27xss%27)"
+        url = reverse("linkding:bookmarks.shared") + "?user=alert(%27xss%27)"
         response = self.client.get(url)
         self.assertNotContains(response, "alert('xss')")
 
-        url = reverse("bookmarks:shared") + "?page=alert(%27xss%27)"
+        url = reverse("linkding:bookmarks.shared") + "?page=alert(%27xss%27)"
         response = self.client.get(url)
         self.assertNotContains(response, "alert('xss')")
+
+    def test_turbo_frame_details_modal_renders_details_modal_update(self):
+        bookmark = self.setup_bookmark()
+        url = reverse("linkding:bookmarks.shared") + f"?bookmark_id={bookmark.id}"
+        response = self.client.get(url, headers={"Turbo-Frame": "details-modal"})
+
+        self.assertEqual(200, response.status_code)
+
+        soup = self.make_soup(response.content.decode())
+        self.assertIsNotNone(soup.select_one("turbo-frame#details-modal"))
+        self.assertIsNone(soup.select_one("#bookmark-list-container"))
+        self.assertIsNone(soup.select_one("#tag-cloud-container"))
+
+    def test_includes_public_shared_rss_feed(self):
+        response = self.client.get(reverse("linkding:bookmarks.shared"))
+        soup = self.make_soup(response.content.decode())
+
+        feed = soup.select_one('head link[type="application/rss+xml"]')
+        self.assertIsNotNone(feed)
+        self.assertEqual(feed.attrs["href"], reverse("linkding:feeds.public_shared"))
+
+    def test_tag_menu_visible_for_authenticated_user(self):
+        self.authenticate()
+
+        response = self.client.get(reverse("linkding:bookmarks.shared"))
+        html = response.content.decode()
+
+        soup = self.make_soup(html)
+        tag_menu = soup.find(attrs={"aria-label": "Tags menu"})
+        self.assertIsNotNone(tag_menu)
+
+    def test_tag_menu_not_visible_for_unauthenticated_user(self):
+        response = self.client.get(reverse("linkding:bookmarks.shared"))
+        html = response.content.decode()
+
+        soup = self.make_soup(html)
+        tag_menu = soup.find(attrs={"aria-label": "Tags menu"})
+        self.assertIsNone(tag_menu)

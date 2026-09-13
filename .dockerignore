@@ -3,19 +3,19 @@
 
 # Include files required for build or at runtime
 !/bookmarks
-!/siteroot
 
 !/bootstrap.sh
 !/LICENSE.txt
 !/manage.py
 !/package.json
 !/package-lock.json
-!/requirements.dev.txt
-!/requirements.txt
-!/rollup.config.mjs
-!/supervisord.conf
+!/pyproject.toml
+!/scripts/setup-ublock.sh
+!/supervisord-tasks.conf
+!/supervisord-all.conf
+!/uv.lock
 !/uwsgi.ini
 !/version.txt
 
  # Remove dev settings
-/siteroot/settings/dev.py
+/bookmarks/settings/dev.py

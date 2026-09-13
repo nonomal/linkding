@@ -9,6 +9,7 @@ docker run -d \
   -e POSTGRES_USER=linkding \
   -e POSTGRES_PASSWORD=linkding \
   -p 5432:5432 \
+  -v $(pwd)/tmp/postgres-data:/var/lib/postgresql/data \
   --name linkding-postgres-test \
   postgres
 
@@ -24,6 +25,6 @@ export LD_DB_PASSWORD=linkding
 export LD_SUPERUSER_NAME=admin
 export LD_SUPERUSER_PASSWORD=admin
 
-python manage.py migrate
-python manage.py create_initial_superuser
-python manage.py runserver
+uv run manage.py migrate
+uv run manage.py create_initial_superuser
+uv run manage.py runserver

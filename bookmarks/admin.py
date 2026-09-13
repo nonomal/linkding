@@ -1,3 +1,6 @@
+import os
+
+from django import forms
 from django.contrib import admin, messages
 from django.contrib.admin import AdminSite
 from django.contrib.auth.admin import UserAdmin
@@ -6,12 +9,19 @@ from django.core.paginator import Paginator
 from django.db.models import Count, QuerySet
 from django.shortcuts import render
 from django.urls import path
-from django.utils.translation import ngettext, gettext
+from django.utils.translation import gettext, ngettext
 from huey.contrib.djhuey import HUEY as huey
-from rest_framework.authtoken.admin import TokenAdmin
-from rest_framework.authtoken.models import TokenProxy
 
-from bookmarks.models import Bookmark, BookmarkAsset, Tag, UserProfile, Toast, FeedToken
+from bookmarks.models import (
+    ApiToken,
+    Bookmark,
+    BookmarkAsset,
+    BookmarkBundle,
+    FeedToken,
+    Tag,
+    Toast,
+    UserProfile,
+)
 from bookmarks.services.bookmarks import archive_bookmark, unarchive_bookmark
 
 
@@ -36,12 +46,14 @@ class TaskPaginator(Paginator):
 
     # Copied from Huey's SqliteStorage with some modifications to allow pagination
     def enqueued_items(self, limit, offset):
-        to_bytes = lambda b: bytes(b) if not isinstance(b, bytes) else b
+        def to_bytes(b):
+            return bytes(b) if not isinstance(b, bytes) else b
+
         sql = "select data from task where queue=? order by priority desc, id limit ? offset ?"
         params = (huey.storage.name, limit, offset)
 
         serialized_tasks = [
-            to_bytes(i) for i, in huey.storage.sql(sql, params, results=True)
+            to_bytes(i) for (i,) in huey.storage.sql(sql, params, results=True)
         ]
         return [huey.deserialize_task(task) for task in serialized_tasks]
 
@@ -69,12 +81,17 @@ class LinkdingAdminSite(AdminSite):
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
-            path("tasks/", background_task_view, name="background_tasks"),
+            path(
+                "tasks/",
+                self.admin_view(background_task_view),
+                name="background_tasks",
+            ),
         ]
         return custom_urls + urls
 
     def get_app_list(self, request, app_label=None):
         app_list = super().get_app_list(request, app_label)
+        context_path = os.getenv("LD_CONTEXT_PATH", "")
         app_list += [
             {
                 "name": "Huey",
@@ -83,7 +100,7 @@ class LinkdingAdminSite(AdminSite):
                     {
                         "name": "Queued tasks",
                         "object_name": "background_tasks",
-                        "admin_url": "/admin/tasks/",
+                        "admin_url": f"/{context_path}admin/tasks/",
                         "view_only": True,
                     }
                 ],
@@ -206,7 +223,7 @@ class AdminBookmarkAsset(admin.ModelAdmin):
 
     list_display = ("custom_display_name", "date_created", "status")
     search_fields = (
-        "custom_display_name",
+        "display_name",
         "file",
     )
     list_filter = ("status",)
@@ -256,6 +273,23 @@ class AdminTag(admin.ModelAdmin):
             )
 
 
+class AdminBookmarkBundle(admin.ModelAdmin):
+    list_display = (
+        "name",
+        "owner",
+        "order",
+        "search",
+        "any_tags",
+        "all_tags",
+        "excluded_tags",
+        "filter_shared",
+        "filter_unread",
+        "date_created",
+    )
+    search_fields = ["name", "search", "any_tags", "all_tags", "excluded_tags"]
+    list_filter = ("owner__username",)
+
+
 class AdminUserProfileInline(admin.StackedInline):
     model = UserProfile
     can_delete = False
@@ -270,7 +304,7 @@ class AdminCustomUser(UserAdmin):
     def get_inline_instances(self, request, obj=None):
         if not obj:
             return list()
-        return super(AdminCustomUser, self).get_inline_instances(request, obj)
+        return super().get_inline_instances(request, obj)
 
 
 class AdminToast(admin.ModelAdmin):
@@ -285,11 +319,26 @@ class AdminFeedToken(admin.ModelAdmin):
     list_filter = ("user__username",)
 
 
+class ApiTokenAdminForm(forms.ModelForm):
+    class Meta:
+        model = ApiToken
+        fields = ("name", "user")
+
+
+class AdminApiToken(admin.ModelAdmin):
+    form = ApiTokenAdminForm
+    list_display = ("name", "user", "created")
+    search_fields = ["name", "user__username"]
+    list_filter = ("user__username",)
+    ordering = ("-created",)
+
+
 linkding_admin_site = LinkdingAdminSite()
 linkding_admin_site.register(Bookmark, AdminBookmark)
 linkding_admin_site.register(BookmarkAsset, AdminBookmarkAsset)
 linkding_admin_site.register(Tag, AdminTag)
+linkding_admin_site.register(BookmarkBundle, AdminBookmarkBundle)
 linkding_admin_site.register(User, AdminCustomUser)
-linkding_admin_site.register(TokenProxy, TokenAdmin)
+linkding_admin_site.register(ApiToken, AdminApiToken)
 linkding_admin_site.register(Toast, AdminToast)
 linkding_admin_site.register(FeedToken, AdminFeedToken)

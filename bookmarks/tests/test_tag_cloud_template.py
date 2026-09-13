@@ -1,35 +1,41 @@
-from typing import List, Type
-
-from django.contrib.auth.models import User, AnonymousUser
+from django.contrib.auth.models import AnonymousUser, User
 from django.http import HttpResponse
-from django.template import Template, RequestContext
-from django.test import TestCase, RequestFactory
+from django.template import RequestContext, Template
+from django.test import RequestFactory, TestCase
 
-from bookmarks.middlewares import UserProfileMiddleware
-from bookmarks.models import UserProfile
+from bookmarks.middlewares import LinkdingMiddleware
+from bookmarks.models import BookmarkSearch, UserProfile
 from bookmarks.tests.helpers import BookmarkFactoryMixin, HtmlTestMixin
-from bookmarks.views.partials import contexts
+from bookmarks.views import contexts
 
 
 class TagCloudTemplateTest(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
     def render_template(
         self,
-        context_type: Type[contexts.TagCloudContext] = contexts.ActiveTagCloudContext,
+        context_type: type[contexts.TagCloudContext] = contexts.ActiveTagCloudContext,
         url: str = "/test",
         user: User | AnonymousUser = None,
     ):
         rf = RequestFactory()
         request = rf.get(url)
         request.user = user or self.get_or_create_test_user()
-        middleware = UserProfileMiddleware(lambda r: HttpResponse())
+        middleware = LinkdingMiddleware(lambda r: HttpResponse())
         middleware(request)
 
-        tag_cloud_context = context_type(request)
+        search = BookmarkSearch.from_request(
+            request, request.GET, request.user_profile.search_preferences
+        )
+        tag_cloud_context = context_type(request, search)
         context = RequestContext(request, {"tag_cloud": tag_cloud_context})
         template_to_render = Template("{% include 'bookmarks/tag_cloud.html' %}")
         return template_to_render.render(context)
 
-    def assertTagGroups(self, rendered_template: str, groups: List[List[str]]):
+    def assertTagGroups(
+        self,
+        rendered_template: str,
+        groups: list[list[str]],
+        highlight_first_char: bool = True,
+    ):
         soup = self.make_soup(rendered_template)
         group_elements = soup.select("p.group")
 
@@ -44,6 +50,18 @@ class TagCloudTemplateTest(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
             for tag_index, tag in enumerate(tags, start=0):
                 link_element = link_elements[tag_index]
                 self.assertEqual(link_element.text.strip(), tag)
+
+                if tag_index == 0:
+                    if highlight_first_char:
+                        self.assertIn(
+                            f'<span class="highlight-char">{tag[0]}</span>',
+                            str(link_element),
+                        )
+                    else:
+                        self.assertNotIn(
+                            f'<span class="highlight-char">{tag[0]}</span>',
+                            str(link_element),
+                        )
 
     def assertNumSelectedTags(self, rendered_template: str, count: int):
         soup = self.make_soup(rendered_template)
@@ -175,6 +193,7 @@ class TagCloudTemplateTest(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
                     "Coyote",
                 ],
             ],
+            False,
         )
 
     def test_no_duplicate_tag_names(self):
@@ -203,13 +222,43 @@ class TagCloudTemplateTest(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         tag = self.setup_tag(name="tag1")
         self.setup_bookmark(tags=[tag], title="term1")
 
+        rendered_template = self.render_template(url="/test?q=term1&sort=title_asc")
+
+        self.assertInHTML(
+            """
+            <a href="?q=term1+%23tag1&sort=title_asc" class="mr-2" data-is-tag-item>
+              <span class="highlight-char">t</span><span>ag1</span>
+            </a>
+        """,
+            rendered_template,
+        )
+
+    def test_tag_url_removes_page_number_and_details_id(self):
+        tag = self.setup_tag(name="tag1")
+        self.setup_bookmark(tags=[tag], title="term1")
+
         rendered_template = self.render_template(
-            url="/test?q=term1&sort=title_asc&page=2"
+            url="/test?q=term1&sort=title_asc&page=2&details=5"
         )
 
         self.assertInHTML(
             """
-            <a href="?q=term1+%23tag1&sort=title_asc&page=2" class="mr-2" data-is-tag-item>
+            <a href="?q=term1+%23tag1&sort=title_asc" class="mr-2" data-is-tag-item>
+              <span class="highlight-char">t</span><span>ag1</span>
+            </a>
+        """,
+            rendered_template,
+        )
+
+    def test_tag_url_wraps_or_expression_in_parenthesis(self):
+        tag = self.setup_tag(name="tag1")
+        self.setup_bookmark(tags=[tag], title="term1")
+
+        rendered_template = self.render_template(url="/test?q=term1 or term2")
+
+        self.assertInHTML(
+            """
+            <a href="?q=%28term1+or+term2%29+%23tag1" class="mr-2" data-is-tag-item>
               <span class="highlight-char">t</span><span>ag1</span>
             </a>
         """,
@@ -240,6 +289,63 @@ class TagCloudTemplateTest(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         self.assertInHTML(
             """
             <a href="?q=%23tag1"
+               class="text-bold mr-2">
+                <span>-tag2</span>
+            </a>
+        """,
+            rendered_template,
+        )
+
+    def test_selected_tags_complex_queries(self):
+        tags = [
+            self.setup_tag(name="tag1"),
+            self.setup_tag(name="tag2"),
+        ]
+        self.setup_bookmark(tags=tags)
+
+        rendered_template = self.render_template(url="/test?q=%23tag1 or not %23tag2")
+
+        self.assertNumSelectedTags(rendered_template, 2)
+
+        self.assertInHTML(
+            """
+            <a href="?q=not+%23tag2"
+               class="text-bold mr-2">
+                <span>-tag1</span>
+            </a>
+        """,
+            rendered_template,
+        )
+
+        self.assertInHTML(
+            """
+            <a href="?q=%23tag1"
+               class="text-bold mr-2">
+                <span>-tag2</span>
+            </a>
+        """,
+            rendered_template,
+        )
+
+        rendered_template = self.render_template(
+            url="/test?q=%23tag1 and not (%23tag2 or term)"
+        )
+
+        self.assertNumSelectedTags(rendered_template, 2)
+
+        self.assertInHTML(
+            """
+            <a href="?q=not+%28%23tag2+or+term%29"
+               class="text-bold mr-2">
+                <span>-tag1</span>
+            </a>
+        """,
+            rendered_template,
+        )
+
+        self.assertInHTML(
+            """
+            <a href="?q=%23tag1+not+term"
                class="text-bold mr-2">
                 <span>-tag2</span>
             </a>
@@ -347,12 +453,30 @@ class TagCloudTemplateTest(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         self.setup_bookmark(tags=[tag], title="term1", description="term2")
 
         rendered_template = self.render_template(
-            url="/test?q=term1 %23tag1 term2&sort=title_asc&page=2"
+            url="/test?q=term1 %23tag1 term2&sort=title_asc"
         )
 
         self.assertInHTML(
             """
-            <a href="?q=term1+term2&sort=title_asc&page=2"
+            <a href="?q=term1+term2&sort=title_asc"
+               class="text-bold mr-2">
+                <span>-tag1</span>
+            </a>
+        """,
+            rendered_template,
+        )
+
+    def test_selected_tag_url_removes_page_number_and_details_id(self):
+        tag = self.setup_tag(name="tag1")
+        self.setup_bookmark(tags=[tag], title="term1", description="term2")
+
+        rendered_template = self.render_template(
+            url="/test?q=term1 %23tag1 term2&sort=title_asc&page=2&details=5"
+        )
+
+        self.assertInHTML(
+            """
+            <a href="?q=term1+term2&sort=title_asc"
                class="text-bold mr-2">
                 <span>-tag1</span>
             </a>
@@ -371,6 +495,12 @@ class TagCloudTemplateTest(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         self.setup_bookmark(tags=tags)
 
         rendered_template = self.render_template(url="/test?q=%23tag1 %23tag2")
+
+        self.assertTagGroups(rendered_template, [["tag3", "tag4", "tag5"]])
+
+        rendered_template = self.render_template(
+            url="/test?q=%23tag1 or (%23tag2 or not term)"
+        )
 
         self.assertTagGroups(rendered_template, [["tag3", "tag4", "tag5"]])
 
@@ -416,3 +546,28 @@ class TagCloudTemplateTest(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
         """,
             rendered_template,
         )
+
+    def test_tag_links_have_no_whitespace_around_contents(self):
+        tags = [
+            self.setup_tag(name="tag1"),
+            self.setup_tag(name="tag2"),
+            self.setup_tag(name="tag3"),
+        ]
+        self.setup_bookmark(tags=tags)
+
+        rendered_template = self.render_template(url="/test?q=%23tag1")
+
+        soup = self.make_soup(rendered_template)
+        link_elements = soup.select(".tag-cloud a")
+        self.assertEqual(len(link_elements), 3)
+
+        for link_element in link_elements:
+            contents = link_element.decode_contents()
+            self.assertTrue(
+                contents.startswith("<span"),
+                f"unexpected characters after opening anchor tag: {contents!r}",
+            )
+            self.assertTrue(
+                contents.endswith("</span>"),
+                f"unexpected characters before closing anchor tag: {contents!r}",
+            )

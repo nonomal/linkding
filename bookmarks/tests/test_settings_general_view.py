@@ -1,19 +1,19 @@
+import hashlib
 import random
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
 
 import requests
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from requests import RequestException
 
-from bookmarks.models import UserProfile, GlobalSettings
+from bookmarks.models import GlobalSettings, UserProfile
 from bookmarks.services import tasks
 from bookmarks.tests.helpers import BookmarkFactoryMixin
 from bookmarks.views.settings import app_version, get_version_info
 
 
 class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
-
     def setUp(self) -> None:
         user = self.get_or_create_test_user()
         self.client.force_login(user)
@@ -22,6 +22,7 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
         if not overrides:
             overrides = {}
         form_data = {
+            "update_profile": "",
             "theme": UserProfile.THEME_AUTO,
             "bookmark_date_display": UserProfile.BOOKMARK_DATE_DISPLAY_RELATIVE,
             "bookmark_description_display": UserProfile.BOOKMARK_DESCRIPTION_DISPLAY_INLINE,
@@ -43,6 +44,11 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
             "permanent_notes": False,
             "custom_css": "",
             "auto_tagging_rules": "",
+            "items_per_page": "30",
+            "sticky_pagination": False,
+            "collapse_side_panel": False,
+            "hide_bundles": False,
+            "legacy_search": False,
         }
 
         return {**form_data, **overrides}
@@ -50,7 +56,7 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
     def assertSuccessMessage(self, html, message: str, count=1):
         self.assertInHTML(
             f"""
-            <div class="toast toast-success mb-4">{ message }</div>
+            <div class="toast toast-success mb-4">{message}</div>
         """,
             html,
             count=count,
@@ -59,24 +65,31 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
     def assertErrorMessage(self, html, message: str, count=1):
         self.assertInHTML(
             f"""
-            <div class="toast toast-error mb-4">{ message }</div>
+            <div class="toast toast-error mb-4">{message}</div>
         """,
             html,
             count=count,
         )
 
     def test_should_render_successfully(self):
-        response = self.client.get(reverse("bookmarks:settings.general"))
+        response = self.client.get(reverse("linkding:settings.general"))
 
         self.assertEqual(response.status_code, 200)
 
     def test_should_check_authentication(self):
         self.client.logout()
-        response = self.client.get(reverse("bookmarks:settings.general"), follow=True)
+        response = self.client.get(reverse("linkding:settings.general"), follow=True)
 
         self.assertRedirects(
             response,
-            reverse("login") + "?next=" + reverse("bookmarks:settings.general"),
+            reverse("login") + "?next=" + reverse("linkding:settings.general"),
+        )
+
+        response = self.client.get(reverse("linkding:settings.update"), follow=True)
+
+        self.assertRedirects(
+            response,
+            reverse("login") + "?next=" + reverse("linkding:settings.update"),
         )
 
     def test_update_profile(self):
@@ -102,10 +115,18 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
             "display_remove_bookmark_action": False,
             "permanent_notes": True,
             "default_mark_unread": True,
+            "default_mark_shared": True,
             "custom_css": "body { background-color: #000; }",
             "auto_tagging_rules": "example.com tag",
+            "items_per_page": "10",
+            "sticky_pagination": True,
+            "collapse_side_panel": True,
+            "hide_bundles": True,
+            "legacy_search": True,
         }
-        response = self.client.post(reverse("bookmarks:settings.general"), form_data)
+        response = self.client.post(
+            reverse("linkding:settings.update"), form_data, follow=True
+        )
         html = response.content.decode()
 
         self.user.profile.refresh_from_db()
@@ -169,17 +190,40 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
         self.assertEqual(
             self.user.profile.default_mark_unread, form_data["default_mark_unread"]
         )
+        self.assertEqual(
+            self.user.profile.default_mark_shared, form_data["default_mark_shared"]
+        )
         self.assertEqual(self.user.profile.custom_css, form_data["custom_css"])
         self.assertEqual(
             self.user.profile.auto_tagging_rules, form_data["auto_tagging_rules"]
         )
+        self.assertEqual(
+            self.user.profile.items_per_page, int(form_data["items_per_page"])
+        )
+        self.assertEqual(
+            self.user.profile.sticky_pagination, form_data["sticky_pagination"]
+        )
+        self.assertEqual(
+            self.user.profile.collapse_side_panel, form_data["collapse_side_panel"]
+        )
+        self.assertEqual(self.user.profile.hide_bundles, form_data["hide_bundles"])
+        self.assertEqual(self.user.profile.legacy_search, form_data["legacy_search"])
+
         self.assertSuccessMessage(html, "Profile updated")
+
+    def test_update_profile_with_invalid_form_returns_422(self):
+        form_data = self.create_profile_form_data({"items_per_page": "-1"})
+        response = self.client.post(reverse("linkding:settings.update"), form_data)
+
+        self.assertEqual(response.status_code, 422)
 
     def test_update_profile_should_not_be_called_without_respective_form_action(self):
         form_data = {
             "theme": UserProfile.THEME_DARK,
         }
-        response = self.client.post(reverse("bookmarks:settings.general"), form_data)
+        response = self.client.post(
+            reverse("linkding:settings.update"), form_data, follow=True
+        )
         html = response.content.decode()
 
         self.user.profile.refresh_from_db()
@@ -188,6 +232,31 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
         self.assertEqual(self.user.profile.theme, UserProfile.THEME_AUTO)
         self.assertSuccessMessage(html, "Profile updated", count=0)
 
+    def test_update_profile_updates_custom_css_hash(self):
+        form_data = self.create_profile_form_data(
+            {
+                "custom_css": "body { background-color: #000; }",
+            }
+        )
+        self.client.post(reverse("linkding:settings.update"), form_data, follow=True)
+        self.user.profile.refresh_from_db()
+
+        expected_hash = hashlib.md5(form_data["custom_css"].encode("utf-8")).hexdigest()
+        self.assertEqual(expected_hash, self.user.profile.custom_css_hash)
+
+        form_data["custom_css"] = "body { background-color: #fff; }"
+        self.client.post(reverse("linkding:settings.update"), form_data, follow=True)
+        self.user.profile.refresh_from_db()
+
+        expected_hash = hashlib.md5(form_data["custom_css"].encode("utf-8")).hexdigest()
+        self.assertEqual(expected_hash, self.user.profile.custom_css_hash)
+
+        form_data["custom_css"] = ""
+        self.client.post(reverse("linkding:settings.update"), form_data, follow=True)
+        self.user.profile.refresh_from_db()
+
+        self.assertEqual("", self.user.profile.custom_css_hash)
+
     def test_enable_favicons_should_schedule_icon_update(self):
         with patch.object(
             tasks, "schedule_bookmarks_without_favicons"
@@ -195,18 +264,17 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
             # Enabling favicons schedules update
             form_data = self.create_profile_form_data(
                 {
-                    "update_profile": "",
                     "enable_favicons": True,
                 }
             )
-            self.client.post(reverse("bookmarks:settings.general"), form_data)
+            self.client.post(reverse("linkding:settings.update"), form_data)
 
             mock_schedule_bookmarks_without_favicons.assert_called_once_with(self.user)
 
             # No update scheduled if favicons are already enabled
             mock_schedule_bookmarks_without_favicons.reset_mock()
 
-            self.client.post(reverse("bookmarks:settings.general"), form_data)
+            self.client.post(reverse("linkding:settings.update"), form_data)
 
             mock_schedule_bookmarks_without_favicons.assert_not_called()
 
@@ -217,7 +285,7 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
                 }
             )
 
-            self.client.post(reverse("bookmarks:settings.general"), form_data)
+            self.client.post(reverse("linkding:settings.update"), form_data)
 
             mock_schedule_bookmarks_without_favicons.assert_not_called()
 
@@ -229,7 +297,7 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
                 "refresh_favicons": "",
             }
             response = self.client.post(
-                reverse("bookmarks:settings.general"), form_data
+                reverse("linkding:settings.update"), form_data, follow=True
             )
             html = response.content.decode()
 
@@ -243,9 +311,7 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
             tasks, "schedule_refresh_favicons"
         ) as mock_schedule_refresh_favicons:
             form_data = {}
-            response = self.client.post(
-                reverse("bookmarks:settings.general"), form_data
-            )
+            response = self.client.post(reverse("linkding:settings.update"), form_data)
             html = response.content.decode()
 
             mock_schedule_refresh_favicons.assert_not_called()
@@ -258,7 +324,7 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
         profile.enable_favicons = True
         profile.save()
 
-        response = self.client.get(reverse("bookmarks:settings.general"))
+        response = self.client.get(reverse("linkding:settings.general"))
         html = response.content.decode()
 
         self.assertInHTML(
@@ -276,7 +342,7 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
         profile.enable_favicons = False
         profile.save()
 
-        response = self.client.get(reverse("bookmarks:settings.general"))
+        response = self.client.get(reverse("linkding:settings.general"))
         html = response.content.decode()
 
         self.assertInHTML(
@@ -293,7 +359,7 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
         profile.enable_favicons = True
         profile.save()
 
-        response = self.client.get(reverse("bookmarks:settings.general"))
+        response = self.client.get(reverse("linkding:settings.general"))
         html = response.content.decode()
 
         self.assertInHTML(
@@ -311,18 +377,17 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
             # Enabling favicons schedules update
             form_data = self.create_profile_form_data(
                 {
-                    "update_profile": "",
                     "enable_preview_images": True,
                 }
             )
-            self.client.post(reverse("bookmarks:settings.general"), form_data)
+            self.client.post(reverse("linkding:settings.update"), form_data)
 
             mock_schedule_bookmarks_without_previews.assert_called_once_with(self.user)
 
             # No update scheduled if favicons are already enabled
             mock_schedule_bookmarks_without_previews.reset_mock()
 
-            self.client.post(reverse("bookmarks:settings.general"), form_data)
+            self.client.post(reverse("linkding:settings.update"), form_data)
 
             mock_schedule_bookmarks_without_previews.assert_not_called()
 
@@ -333,19 +398,21 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
                 }
             )
 
-            self.client.post(reverse("bookmarks:settings.general"), form_data)
+            self.client.post(reverse("linkding:settings.update"), form_data)
 
             mock_schedule_bookmarks_without_previews.assert_not_called()
 
     def test_automatic_html_snapshots_should_be_hidden_when_snapshots_not_supported(
         self,
     ):
-        response = self.client.get(reverse("bookmarks:settings.general"))
+        response = self.client.get(reverse("linkding:settings.general"))
         html = response.content.decode()
 
         self.assertInHTML(
             """
-            <input type="checkbox" name="enable_automatic_html_snapshots" id="id_enable_automatic_html_snapshots" checked="">
+            <input type="checkbox" name="enable_automatic_html_snapshots"
+            aria-describedby="id_enable_automatic_html_snapshots_help"
+            id="id_enable_automatic_html_snapshots" checked="">
             """,
             html,
             count=0,
@@ -355,30 +422,40 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
     def test_automatic_html_snapshots_should_be_visible_when_snapshots_supported(
         self,
     ):
-        response = self.client.get(reverse("bookmarks:settings.general"))
+        response = self.client.get(reverse("linkding:settings.general"))
         html = response.content.decode()
 
         self.assertInHTML(
             """
-            <input type="checkbox" name="enable_automatic_html_snapshots" id="id_enable_automatic_html_snapshots" checked="">
+            <input type="checkbox" name="enable_automatic_html_snapshots"
+            aria-describedby="id_enable_automatic_html_snapshots_help"
+            id="id_enable_automatic_html_snapshots" checked="">
             """,
             html,
             count=1,
         )
 
     def test_about_shows_version_info(self):
-        response = self.client.get(reverse("bookmarks:settings.general"))
-        html = response.content.decode()
-
-        self.assertInHTML(
-            f"""
-            <tr>
-                <td>Version</td>
-                <td>{get_version_info(random.random())}</td>
-            </tr>
-        """,
-            html,
+        latest_version_response_mock = Mock(
+            status_code=200, json=lambda: {"name": f"v{app_version}"}
         )
+        with patch.object(requests, "get", return_value=latest_version_response_mock):
+            # Clear the lru_cache so the view recomputes the version info under
+            # the mock instead of returning a value cached by an earlier test
+            # that made a real (potentially rate-limited) network call.
+            get_version_info.cache_clear()
+            response = self.client.get(reverse("linkding:settings.general"))
+            html = response.content.decode()
+
+            self.assertInHTML(
+                f"""
+                <tr>
+                    <td>Version</td>
+                    <td>{get_version_info(random.random())}</td>
+                </tr>
+            """,
+                html,
+            )
 
     def test_get_version_info_just_displays_latest_when_versions_are_equal(self):
         latest_version_response_mock = Mock(
@@ -390,7 +467,7 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
 
     def test_get_version_info_shows_latest_version_when_versions_are_not_equal(self):
         latest_version_response_mock = Mock(
-            status_code=200, json=lambda: {"name": f"v123.0.1"}
+            status_code=200, json=lambda: {"name": "v123.0.1"}
         )
         with patch.object(requests, "get", return_value=latest_version_response_mock):
             version_info = get_version_info(random.random())
@@ -422,10 +499,11 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
                 "create_missing_html_snapshots": "",
             }
             response = self.client.post(
-                reverse("bookmarks:settings.general"), form_data
+                reverse("linkding:settings.update"), form_data, follow=True
             )
             html = response.content.decode()
 
+            self.assertEqual(response.status_code, 200)
             mock_create_missing_html_snapshots.assert_called_once()
             self.assertSuccessMessage(
                 html, "Queued 5 missing snapshots. This may take a while..."
@@ -441,10 +519,11 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
                 "create_missing_html_snapshots": "",
             }
             response = self.client.post(
-                reverse("bookmarks:settings.general"), form_data
+                reverse("linkding:settings.update"), form_data, follow=True
             )
             html = response.content.decode()
 
+            self.assertEqual(response.status_code, 200)
             mock_create_missing_html_snapshots.assert_called_once()
             self.assertSuccessMessage(html, "No missing snapshots found.")
 
@@ -457,10 +536,11 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
             mock_create_missing_html_snapshots.return_value = 5
             form_data = {}
             response = self.client.post(
-                reverse("bookmarks:settings.general"), form_data
+                reverse("linkding:settings.update"), form_data, follow=True
             )
             html = response.content.decode()
 
+            self.assertEqual(response.status_code, 200)
             mock_create_missing_html_snapshots.assert_not_called()
             self.assertSuccessMessage(
                 html, "Queued 5 missing snapshots. This may take a while...", count=0
@@ -477,7 +557,9 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
             "landing_page": GlobalSettings.LANDING_PAGE_SHARED_BOOKMARKS,
             "guest_profile_user": selectable_user.id,
         }
-        response = self.client.post(reverse("bookmarks:settings.general"), form_data)
+        response = self.client.post(
+            reverse("linkding:settings.update"), form_data, follow=True
+        )
         self.assertEqual(response.status_code, 200)
         self.assertSuccessMessage(response.content.decode(), "Global settings updated")
 
@@ -491,7 +573,9 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
             "landing_page": GlobalSettings.LANDING_PAGE_LOGIN,
             "guest_profile_user": "",
         }
-        response = self.client.post(reverse("bookmarks:settings.general"), form_data)
+        response = self.client.post(
+            reverse("linkding:settings.update"), form_data, follow=True
+        )
         self.assertEqual(response.status_code, 200)
         self.assertSuccessMessage(response.content.decode(), "Global settings updated")
 
@@ -509,7 +593,9 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
         form_data = {
             "landing_page": GlobalSettings.LANDING_PAGE_SHARED_BOOKMARKS,
         }
-        response = self.client.post(reverse("bookmarks:settings.general"), form_data)
+        response = self.client.post(
+            reverse("linkding:settings.update"), form_data, follow=True
+        )
         self.assertEqual(response.status_code, 200)
         self.assertSuccessMessage(
             response.content.decode(), "Global settings updated", count=0
@@ -520,15 +606,15 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
             "update_global_settings": "",
             "landing_page": GlobalSettings.LANDING_PAGE_SHARED_BOOKMARKS,
         }
-        response = self.client.post(reverse("bookmarks:settings.general"), form_data)
+        response = self.client.post(reverse("linkding:settings.update"), form_data)
         self.assertEqual(response.status_code, 403)
 
     def test_global_settings_only_visible_for_superuser(self):
-        response = self.client.get(reverse("bookmarks:settings.general"))
+        response = self.client.get(reverse("linkding:settings.general"))
         html = response.content.decode()
 
         self.assertInHTML(
-            "<h2>Global settings</h2>",
+            '<h2 id="global-settings-heading">Global settings</h2>',
             html,
             count=0,
         )
@@ -536,11 +622,11 @@ class SettingsGeneralViewTestCase(TestCase, BookmarkFactoryMixin):
         superuser = self.setup_superuser()
         self.client.force_login(superuser)
 
-        response = self.client.get(reverse("bookmarks:settings.general"))
+        response = self.client.get(reverse("linkding:settings.general"))
         html = response.content.decode()
 
         self.assertInHTML(
-            "<h2>Global settings</h2>",
+            '<h2 id="global-settings-heading">Global settings</h2>',
             html,
             count=1,
         )

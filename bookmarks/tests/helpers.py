@@ -1,20 +1,42 @@
-import random
+import gzip
 import logging
+import os
+import random
+import shutil
+import tempfile
 from datetime import datetime
-from typing import List
+from unittest import TestCase
 
 from bs4 import BeautifulSoup
-from django.contrib.auth.models import User
+from django.conf import settings
+from django.test import override_settings
 from django.utils import timezone
 from django.utils.crypto import get_random_string
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from bookmarks.models import Bookmark, BookmarkAsset, Tag
+from bookmarks.models import (
+    ApiToken,
+    Bookmark,
+    BookmarkAsset,
+    BookmarkBundle,
+    Tag,
+    User,
+)
 
 
 class BookmarkFactoryMixin:
     user = None
+
+    def setup_temp_assets_dir(self):
+        self.assets_dir = tempfile.mkdtemp()
+        self.settings_override = override_settings(LD_ASSET_FOLDER=self.assets_dir)
+        self.settings_override.enable()
+        self.addCleanup(self.cleanup_temp_assets_dir)
+
+    def cleanup_temp_assets_dir(self):
+        shutil.rmtree(self.assets_dir)
+        self.settings_override.disable()
 
     def get_or_create_test_user(self):
         if self.user is None:
@@ -40,12 +62,11 @@ class BookmarkFactoryMixin:
         title: str = None,
         description: str = "",
         notes: str = "",
-        website_title: str = "",
-        website_description: str = "",
         web_archive_snapshot_url: str = "",
         favicon_file: str = "",
         preview_image_file: str = "",
         added: datetime = None,
+        modified: datetime = None,
     ):
         if title is None:
             title = get_random_string(length=32)
@@ -58,15 +79,15 @@ class BookmarkFactoryMixin:
             url = "https://example.com/" + unique_id
         if added is None:
             added = timezone.now()
+        if modified is None:
+            modified = timezone.now()
         bookmark = Bookmark(
             url=url,
             title=title,
             description=description,
             notes=notes,
-            website_title=website_title,
-            website_description=website_description,
             date_added=added,
-            date_modified=timezone.now(),
+            date_modified=modified,
             owner=user,
             is_archived=is_archived,
             unread=unread,
@@ -150,6 +171,37 @@ class BookmarkFactoryMixin:
     def get_numbered_bookmark(self, title: str):
         return Bookmark.objects.get(title=title)
 
+    def setup_bundle(
+        self,
+        user: User = None,
+        name: str = None,
+        search: str = "",
+        any_tags: str = "",
+        all_tags: str = "",
+        excluded_tags: str = "",
+        filter_unread: str = BookmarkBundle.FILTER_STATE_OFF,
+        filter_shared: str = BookmarkBundle.FILTER_STATE_OFF,
+        order: int = 0,
+    ):
+        if user is None:
+            user = self.get_or_create_test_user()
+        if not name:
+            name = get_random_string(length=32)
+        bundle = BookmarkBundle(
+            name=name,
+            owner=user,
+            date_created=timezone.now(),
+            search=search,
+            any_tags=any_tags,
+            all_tags=all_tags,
+            excluded_tags=excluded_tags,
+            filter_unread=filter_unread,
+            filter_shared=filter_shared,
+            order=order,
+        )
+        bundle.save()
+        return bundle
+
     def setup_asset(
         self,
         bookmark: Bookmark,
@@ -182,6 +234,33 @@ class BookmarkFactoryMixin:
         asset.save()
         return asset
 
+    def setup_asset_file(self, asset: BookmarkAsset, file_content: str = "test"):
+        filepath = os.path.join(settings.LD_ASSET_FOLDER, asset.file)
+        if asset.gzip:
+            with gzip.open(filepath, "wb") as f:
+                f.write(file_content.encode())
+        else:
+            with open(filepath, "w") as f:
+                f.write(file_content)
+
+    def read_asset_file(self, asset: BookmarkAsset):
+        filepath = os.path.join(settings.LD_ASSET_FOLDER, asset.file)
+
+        if asset.gzip:
+            with gzip.open(filepath, "rb") as f:
+                return f.read()
+        else:
+            with open(filepath, "rb") as f:
+                return f.read()
+
+    def get_asset_filesize(self, asset: BookmarkAsset):
+        filepath = os.path.join(settings.LD_ASSET_FOLDER, asset.file)
+        return os.path.getsize(filepath) if os.path.exists(filepath) else 0
+
+    def has_asset_file(self, asset: BookmarkAsset):
+        filepath = os.path.join(settings.LD_ASSET_FOLDER, asset.file)
+        return os.path.exists(filepath)
+
     def setup_tag(self, user: User = None, name: str = ""):
         if user is None:
             user = self.get_or_create_test_user()
@@ -205,7 +284,16 @@ class BookmarkFactoryMixin:
         user.profile.save()
         return user
 
-    def get_tags_from_bookmarks(self, bookmarks: [Bookmark]):
+    def setup_api_token(self, user: User = None, name: str = ""):
+        if user is None:
+            user = self.get_or_create_test_user()
+        if not name:
+            name = get_random_string(length=32)
+        token = ApiToken(user=user, name=name)
+        token.save()
+        return token
+
+    def get_tags_from_bookmarks(self, bookmarks: list[Bookmark]):
         all_tags = []
         for bookmark in bookmarks:
             all_tags = all_tags + list(bookmark.tags.all())
@@ -220,7 +308,82 @@ class HtmlTestMixin:
         return BeautifulSoup(html, features="html.parser")
 
 
+class BookmarkListTestMixin(TestCase, HtmlTestMixin):
+    def assertVisibleBookmarks(
+        self, response, bookmarks: list[Bookmark], link_target: str = "_blank"
+    ):
+        soup = self.make_soup(response.content.decode())
+        bookmark_list = soup.select_one(
+            f'ul.bookmark-list[data-bookmarks-total="{len(bookmarks)}"]'
+        )
+        self.assertIsNotNone(bookmark_list)
+
+        bookmark_items = bookmark_list.select("ul.bookmark-list > li")
+        self.assertEqual(len(bookmark_items), len(bookmarks))
+
+        for bookmark in bookmarks:
+            bookmark_item = bookmark_list.select_one(
+                f'ul.bookmark-list > li a[href="{bookmark.url}"][target="{link_target}"]'
+            )
+            self.assertIsNotNone(bookmark_item)
+
+    def assertInvisibleBookmarks(
+        self, response, bookmarks: list[Bookmark], link_target: str = "_blank"
+    ):
+        soup = self.make_soup(response.content.decode())
+
+        for bookmark in bookmarks:
+            bookmark_item = soup.select_one(
+                f'ul.bookmark-list > li a[href="{bookmark.url}"][target="{link_target}"]'
+            )
+            self.assertIsNone(bookmark_item)
+
+
+class TagCloudTestMixin(TestCase, HtmlTestMixin):
+    def assertVisibleTags(self, response, tags: list[Tag]):
+        soup = self.make_soup(response.content.decode())
+        tag_cloud = soup.select_one("div.tag-cloud")
+        self.assertIsNotNone(tag_cloud)
+
+        tag_items = tag_cloud.select("a[data-is-tag-item]")
+        self.assertEqual(len(tag_items), len(tags))
+
+        tag_item_names = [tag_item.text.strip() for tag_item in tag_items]
+
+        for tag in tags:
+            self.assertTrue(tag.name in tag_item_names)
+
+    def assertInvisibleTags(self, response, tags: list[Tag]):
+        soup = self.make_soup(response.content.decode())
+        tag_items = soup.select("a[data-is-tag-item]")
+
+        tag_item_names = [tag_item.text.strip() for tag_item in tag_items]
+
+        for tag in tags:
+            self.assertFalse(tag.name in tag_item_names)
+
+    def assertSelectedTags(self, response, tags: list[Tag]):
+        soup = self.make_soup(response.content.decode())
+        selected_tags = soup.select_one("p.selected-tags")
+        self.assertIsNotNone(selected_tags)
+
+        tag_list = selected_tags.select("a")
+        self.assertEqual(len(tag_list), len(tags))
+
+        for tag in tags:
+            self.assertTrue(
+                tag.name in selected_tags.text,
+                msg=f"Selected tags do not contain: {tag.name}",
+            )
+
+
 class LinkdingApiTestCase(APITestCase):
+    def authenticate(self):
+        user = self.get_or_create_test_user()
+        self.api_token = ApiToken(user=user, name="Test Token")
+        self.api_token.save()
+        self.client.credentials(HTTP_AUTHORIZATION="Token " + self.api_token.key)
+
     def get(self, url, expected_status_code=status.HTTP_200_OK):
         response = self.client.get(url)
         self.assertEqual(response.status_code, expected_status_code)
@@ -254,6 +417,7 @@ class BookmarkHtmlTag:
         title: str = "",
         description: str = "",
         add_date: str = "",
+        last_modified: str = "",
         tags: str = "",
         to_read: bool = False,
         private: bool = True,
@@ -262,6 +426,7 @@ class BookmarkHtmlTag:
         self.title = title
         self.description = description
         self.add_date = add_date
+        self.last_modified = last_modified
         self.tags = tags
         self.to_read = to_read
         self.private = private
@@ -271,17 +436,18 @@ class ImportTestMixin:
     def render_tag(self, tag: BookmarkHtmlTag):
         return f"""
         <DT>
-        <A {f'HREF="{tag.href}"' if tag.href else ''}
-           {f'ADD_DATE="{tag.add_date}"' if tag.add_date else ''}
-           {f'TAGS="{tag.tags}"' if tag.tags else ''}
+        <A {f'HREF="{tag.href}"' if tag.href else ""}
+           {f'ADD_DATE="{tag.add_date}"' if tag.add_date else ""}
+           {f'LAST_MODIFIED="{tag.last_modified}"' if tag.last_modified else ""}
+           {f'TAGS="{tag.tags}"' if tag.tags else ""}
            TOREAD="{1 if tag.to_read else 0}"
            PRIVATE="{1 if tag.private else 0}">
-           {tag.title if tag.title else ''}
+           {tag.title if tag.title else ""}
         </A>
-        {f'<DD>{tag.description}' if tag.description else ''}
+        {f"<DD>{tag.description}" if tag.description else ""}
         """
 
-    def render_html(self, tags: List[BookmarkHtmlTag] = None, tags_html: str = ""):
+    def render_html(self, tags: list[BookmarkHtmlTag] = None, tags_html: str = ""):
         if tags:
             rendered_tags = [self.render_tag(tag) for tag in tags]
             tags_html = "\n".join(rendered_tags)

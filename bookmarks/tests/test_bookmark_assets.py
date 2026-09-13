@@ -3,23 +3,16 @@ import os
 from django.conf import settings
 from django.test import TestCase
 
-from bookmarks.tests.helpers import (
-    BookmarkFactoryMixin,
-)
+from bookmarks.models import BookmarkAsset
 from bookmarks.services import bookmarks
+from bookmarks.tests.helpers import BookmarkFactoryMixin
 
 
 class BookmarkAssetsTestCase(TestCase, BookmarkFactoryMixin):
-    def tearDown(self):
-        temp_files = [
-            f for f in os.listdir(settings.LD_ASSET_FOLDER) if f.startswith("temp")
-        ]
-        for temp_file in temp_files:
-            os.remove(os.path.join(settings.LD_ASSET_FOLDER, temp_file))
+    def setUp(self):
+        self.setup_temp_assets_dir()
 
     def setup_asset_file(self, filename):
-        if not os.path.exists(settings.LD_ASSET_FOLDER):
-            os.makedirs(settings.LD_ASSET_FOLDER)
         filepath = os.path.join(settings.LD_ASSET_FOLDER, filename)
         with open(filepath, "w") as f:
             f.write("test")
@@ -87,3 +80,33 @@ class BookmarkAssetsTestCase(TestCase, BookmarkFactoryMixin):
         # Create asset with initial file
         asset = self.setup_asset(bookmark=bookmark, file="temp.html.gz")
         self.assertEqual(asset.file_size, 4)
+
+    def test_download_name_for_html_snapshot(self):
+        bookmark = self.setup_bookmark()
+        asset = self.setup_asset(
+            bookmark=bookmark,
+            asset_type=BookmarkAsset.TYPE_SNAPSHOT,
+            content_type=BookmarkAsset.CONTENT_TYPE_HTML,
+            display_name="HTML snapshot from Jan 1, 2025",
+        )
+        self.assertEqual(asset.download_name, "HTML snapshot from Jan 1, 2025.html")
+
+    def test_download_name_for_pdf_snapshot(self):
+        bookmark = self.setup_bookmark()
+        asset = self.setup_asset(
+            bookmark=bookmark,
+            asset_type=BookmarkAsset.TYPE_SNAPSHOT,
+            content_type=BookmarkAsset.CONTENT_TYPE_PDF,
+            display_name="PDF download from Jan 1, 2025",
+        )
+        self.assertEqual(asset.download_name, "PDF download from Jan 1, 2025.pdf")
+
+    def test_download_name_for_upload(self):
+        bookmark = self.setup_bookmark()
+        asset = self.setup_asset(
+            bookmark=bookmark,
+            asset_type=BookmarkAsset.TYPE_UPLOAD,
+            content_type="text/plain",
+            display_name="document.txt",
+        )
+        self.assertEqual(asset.download_name, "document.txt")

@@ -60,6 +60,7 @@ coverage.xml
 *.cover
 .hypothesis/
 .pytest_cache/
+test-results/
 
 # Translations
 *.mo
@@ -183,7 +184,7 @@ typings/
 ### Custom
 # Rollup compilation output
 /bookmarks/static/bundle.js*
-# SASS compilation output
+# CSS compilation output
 /bookmarks/static/theme-*.css*
 # Collected static files for deployment
 /static
@@ -192,7 +193,11 @@ typings/
 # Database file
 /data
 # ublock + chromium
-/uBlock0.chromium
+/uBOLite.chromium.mv3
 /chromium-profile
 # direnv
 /.direnv
+
+# Test setups
+/scripts/unsecure-test-setups/authelia-oidc/authelia/db.sqlite3
+/scripts/unsecure-test-setups/authelia-oidc/traefik/certs

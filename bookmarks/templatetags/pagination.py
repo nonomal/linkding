@@ -2,21 +2,58 @@ from functools import reduce
 
 from django import template
 from django.core.paginator import Page
+from django.http import QueryDict
 
 NUM_ADJACENT_PAGES = 2
 
 register = template.Library()
 
 
-@register.inclusion_tag(
-    "bookmarks/pagination.html", name="pagination", takes_context=True
-)
+@register.inclusion_tag("shared/pagination.html", name="pagination", takes_context=True)
 def pagination(context, page: Page):
+    request = context["request"]
+    pagination_frame = context.get("pagination_frame", "_top")
+    base_url = request.path
+
+    # remove page number and details from query parameters
+    query_params = request.GET.copy()
+    query_params.pop("page", None)
+    query_params.pop("details", None)
+
+    prev_link = (
+        _generate_link(base_url, query_params, page.previous_page_number())
+        if page.has_previous()
+        else None
+    )
+    next_link = (
+        _generate_link(base_url, query_params, page.next_page_number())
+        if page.has_next()
+        else None
+    )
+
     visible_page_numbers = get_visible_page_numbers(
         page.number, page.paginator.num_pages
     )
+    page_links = []
+    for page_number in visible_page_numbers:
+        if page_number == -1:
+            page_links.append(None)
+        else:
+            link = _generate_link(base_url, query_params, page_number)
+            page_links.append(
+                {
+                    "active": page_number == page.number,
+                    "number": page_number,
+                    "link": link,
+                }
+            )
 
-    return {"page": page, "visible_page_numbers": visible_page_numbers}
+    return {
+        "prev_link": prev_link,
+        "next_link": next_link,
+        "page_links": page_links,
+        "pagination_frame": pagination_frame,
+    }
 
 
 def get_visible_page_numbers(current_page_number: int, num_pages: int) -> [int]:
@@ -56,3 +93,9 @@ def get_visible_page_numbers(current_page_number: int, num_pages: int) -> [int]:
         return result
 
     return reduce(append_page, visible_pages, [])
+
+
+def _generate_link(base_url: str, query_params: QueryDict, page_number: int) -> str:
+    query_params = query_params.copy()
+    query_params["page"] = page_number
+    return f"{base_url}?{query_params.urlencode()}"

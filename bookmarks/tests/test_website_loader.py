@@ -1,7 +1,11 @@
+import ipaddress
 from unittest import mock
-from bookmarks.services import website_loader
 
+import requests
 from django.test import TestCase
+
+from bookmarks.services import website_loader
+from bookmarks.services.http_client import BlockedAddressError
 
 
 class MockStreamingResponse:
@@ -12,7 +16,7 @@ class MockStreamingResponse:
             self.chunks.append(chunk.encode("utf-8"))
 
             if index == insert_head_after_chunk:
-                self.chunks.append("</head>".encode("utf-8"))
+                self.chunks.append(b"</head>")
 
     def iter_content(self, **kwargs):
         return self.chunks
@@ -27,7 +31,7 @@ class MockStreamingResponse:
 class WebsiteLoaderTestCase(TestCase):
     def setUp(self):
         # clear cached metadata before test run
-        website_loader.load_website_metadata.cache_clear()
+        website_loader._load_website_metadata_cached.cache_clear()
 
     def render_html_document(
         self, title, description="", og_description="", og_image=""
@@ -58,7 +62,7 @@ class WebsiteLoaderTestCase(TestCase):
         """
 
     def test_load_page_returns_content(self):
-        with mock.patch("requests.get") as mock_get:
+        with mock.patch("bookmarks.services.http_client.get") as mock_get:
             mock_get.return_value = MockStreamingResponse(
                 num_chunks=10, chunk_size=1024
             )
@@ -68,7 +72,7 @@ class WebsiteLoaderTestCase(TestCase):
             self.assertEqual(expected_content_size, len(content))
 
     def test_load_page_limits_large_documents(self):
-        with mock.patch("requests.get") as mock_get:
+        with mock.patch("bookmarks.services.http_client.get") as mock_get:
             mock_get.return_value = MockStreamingResponse(
                 num_chunks=10, chunk_size=1024 * 1000
             )
@@ -79,7 +83,7 @@ class WebsiteLoaderTestCase(TestCase):
             self.assertEqual(expected_content_size, len(content))
 
     def test_load_page_stops_reading_at_end_of_head(self):
-        with mock.patch("requests.get") as mock_get:
+        with mock.patch("bookmarks.services.http_client.get") as mock_get:
             mock_get.return_value = MockStreamingResponse(
                 num_chunks=10, chunk_size=1024 * 1000, insert_head_after_chunk=0
             )
@@ -90,9 +94,9 @@ class WebsiteLoaderTestCase(TestCase):
             self.assertEqual(expected_content_size, len(content))
 
     def test_load_page_removes_bytes_after_end_of_head(self):
-        with mock.patch("requests.get") as mock_get:
+        with mock.patch("bookmarks.services.http_client.get") as mock_get:
             mock_response = MockStreamingResponse(num_chunks=1, chunk_size=0)
-            mock_response.chunks[0] = "<head>人</head>".encode("utf-8")
+            mock_response.chunks[0] = "<head>人</head>".encode()
             # add a single byte that can't be decoded to utf-8
             mock_response.chunks[0] += 0xFF.to_bytes(1, "big")
             mock_get.return_value = mock_response
@@ -183,3 +187,153 @@ class WebsiteLoaderTestCase(TestCase):
             metadata = website_loader.load_website_metadata("https://example.com")
             self.assertEqual("test title", metadata.title)
             self.assertEqual("test description", metadata.description)
+
+    def test_load_website_metadata_returns_empty_metadata_for_blocked_address(self):
+        with mock.patch("bookmarks.services.http_client.get") as mock_get:
+            mock_get.side_effect = BlockedAddressError(
+                "nas.local", ipaddress.ip_address("192.168.1.20")
+            )
+            metadata = website_loader.load_website_metadata("http://nas.local")
+
+            self.assertEqual("http://nas.local", metadata.url)
+            self.assertIsNone(metadata.title)
+            self.assertIsNone(metadata.description)
+            self.assertIsNone(metadata.preview_image)
+
+    def test_website_metadata_ignore_cache(self):
+        expected_html = '<html><head><title>Test Title</title><meta name="description" content="Test Description"><meta property="og:image" content="/images/test.jpg"></head></html>'
+
+        with mock.patch.object(
+            website_loader, "load_page", return_value=expected_html
+        ) as mock_load_page:
+            website_loader.load_website_metadata("https://example.com")
+            mock_load_page.assert_called_once()
+
+            website_loader.load_website_metadata("https://example.com")
+            mock_load_page.assert_called_once()
+
+            website_loader.load_website_metadata(
+                "https://example.com", ignore_cache=True
+            )
+            self.assertEqual(mock_load_page.call_count, 2)
+
+
+class ContentTypeDetectionTestCase(TestCase):
+    def test_detect_content_type_returns_content_type_from_head_request(self):
+        with mock.patch("bookmarks.services.http_client.head") as mock_head:
+            mock_response = mock.Mock()
+            mock_response.status_code = 200
+            mock_response.headers = {"Content-Type": "application/pdf"}
+            mock_head.return_value = mock_response
+
+            result = website_loader.detect_content_type("https://example.com/doc.pdf")
+
+            self.assertEqual(result, "application/pdf")
+            mock_head.assert_called_once()
+
+    def test_detect_content_type_strips_charset(self):
+        with mock.patch("bookmarks.services.http_client.head") as mock_head:
+            mock_response = mock.Mock()
+            mock_response.status_code = 200
+            mock_response.headers = {"Content-Type": "text/html; charset=utf-8"}
+            mock_head.return_value = mock_response
+
+            result = website_loader.detect_content_type("https://example.com")
+
+            self.assertEqual(result, "text/html")
+
+    def test_detect_content_type_returns_lowercase(self):
+        with mock.patch("bookmarks.services.http_client.head") as mock_head:
+            mock_response = mock.Mock()
+            mock_response.status_code = 200
+            mock_response.headers = {"Content-Type": "Application/PDF"}
+            mock_head.return_value = mock_response
+
+            result = website_loader.detect_content_type("https://example.com/doc.pdf")
+
+            self.assertEqual(result, "application/pdf")
+
+    def test_detect_content_type_falls_back_to_get_when_head_fails(self):
+        with (
+            mock.patch("bookmarks.services.http_client.head") as mock_head,
+            mock.patch("bookmarks.services.http_client.get") as mock_get,
+        ):
+            mock_head.side_effect = requests.RequestException("HEAD failed")
+
+            mock_response = mock.Mock()
+            mock_response.status_code = 200
+            mock_response.headers = {"Content-Type": "application/pdf"}
+            mock_response.__enter__ = mock.Mock(return_value=mock_response)
+            mock_response.__exit__ = mock.Mock(return_value=False)
+            mock_get.return_value = mock_response
+
+            result = website_loader.detect_content_type("https://example.com/doc.pdf")
+
+            self.assertEqual(result, "application/pdf")
+            mock_head.assert_called_once()
+            mock_get.assert_called_once()
+
+    def test_detect_content_type_returns_none_when_both_head_and_get_fail(self):
+        with (
+            mock.patch("bookmarks.services.http_client.head") as mock_head,
+            mock.patch("bookmarks.services.http_client.get") as mock_get,
+        ):
+            mock_head.side_effect = requests.RequestException("HEAD failed")
+            mock_get.side_effect = requests.RequestException("GET failed")
+
+            result = website_loader.detect_content_type("https://example.com/doc.pdf")
+
+            self.assertIsNone(result)
+
+    def test_detect_content_type_returns_none_for_non_200_status(self):
+        with (
+            mock.patch("bookmarks.services.http_client.head") as mock_head,
+            mock.patch("bookmarks.services.http_client.get") as mock_get,
+        ):
+            mock_head_response = mock.Mock()
+            mock_head_response.status_code = 404
+            mock_head.return_value = mock_head_response
+
+            mock_get_response = mock.Mock()
+            mock_get_response.status_code = 404
+            mock_get_response.__enter__ = mock.Mock(return_value=mock_get_response)
+            mock_get_response.__exit__ = mock.Mock(return_value=False)
+            mock_get.return_value = mock_get_response
+
+            result = website_loader.detect_content_type("https://example.com/doc.pdf")
+
+            self.assertIsNone(result)
+
+    def test_detect_content_type_raises_for_blocked_address(self):
+        with (
+            mock.patch("bookmarks.services.http_client.head") as mock_head,
+            mock.patch("bookmarks.services.http_client.get") as mock_get,
+        ):
+            error = BlockedAddressError("nas.local", ipaddress.ip_address("10.0.0.1"))
+            mock_head.side_effect = error
+
+            with self.assertRaises(BlockedAddressError):
+                website_loader.detect_content_type("http://nas.local/doc.pdf")
+
+            # should not fall back to GET request
+            mock_get.assert_not_called()
+
+    def test_detect_content_type_raises_for_blocked_address_in_get_fallback(self):
+        with (
+            mock.patch("bookmarks.services.http_client.head") as mock_head,
+            mock.patch("bookmarks.services.http_client.get") as mock_get,
+        ):
+            mock_head.side_effect = requests.RequestException("HEAD failed")
+            mock_get.side_effect = BlockedAddressError(
+                "nas.local", ipaddress.ip_address("10.0.0.1")
+            )
+
+            with self.assertRaises(BlockedAddressError):
+                website_loader.detect_content_type("http://nas.local/doc.pdf")
+
+    def test_is_pdf_content_type(self):
+        self.assertTrue(website_loader.is_pdf_content_type("application/pdf"))
+        self.assertTrue(website_loader.is_pdf_content_type("application/x-pdf"))
+        self.assertFalse(website_loader.is_pdf_content_type("text/html"))
+        self.assertFalse(website_loader.is_pdf_content_type(None))
+        self.assertFalse(website_loader.is_pdf_content_type(""))

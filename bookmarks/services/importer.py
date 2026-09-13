@@ -1,13 +1,12 @@
 import logging
-from dataclasses import dataclass
-from typing import List
+from dataclasses import dataclass, field
 
 from django.contrib.auth.models import User
 from django.utils import timezone
 
 from bookmarks.models import Bookmark, Tag
 from bookmarks.services import tasks
-from bookmarks.services.parser import parse, NetscapeBookmark
+from bookmarks.services.parser import NetscapeBookmark, parse
 from bookmarks.utils import parse_timestamp
 
 logger = logging.getLogger(__name__)
@@ -18,6 +17,7 @@ class ImportResult:
     total: int = 0
     success: int = 0
     failed: int = 0
+    imported_urls: set = field(default_factory=set)
 
 
 @dataclass
@@ -41,12 +41,13 @@ class TagCache:
         else:
             return None
 
-    def get_all(self, tag_names: List[str]):
+    def get_all(self, tag_names: list[str]):
         result = []
         for tag_name in tag_names:
             tag = self.get(tag_name)
+            # Tag may not have been created if tag name exceeded maximum length
             # Prevent returning duplicates
-            if not (tag in result):
+            if tag and tag not in result:
                 result.append(tag)
 
         return result
@@ -56,14 +57,16 @@ class TagCache:
 
 
 def import_netscape_html(
-    html: str, user: User, options: ImportOptions = ImportOptions()
+    html: str, user: User, options: ImportOptions | None = None
 ) -> ImportResult:
+    if options is None:
+        options = ImportOptions()
     result = ImportResult()
     import_start = timezone.now()
 
     try:
         netscape_bookmarks = parse(html)
-    except:
+    except Exception:
         logging.exception("Could not read bookmarks file.")
         raise
 
@@ -90,12 +93,19 @@ def import_netscape_html(
     return result
 
 
-def _create_missing_tags(netscape_bookmarks: List[NetscapeBookmark], user: User):
+def _create_missing_tags(netscape_bookmarks: list[NetscapeBookmark], user: User):
     tag_cache = TagCache(user)
     tags_to_create = []
 
     for netscape_bookmark in netscape_bookmarks:
         for tag_name in netscape_bookmark.tag_names:
+            # Skip tag names that exceed the maximum allowed length
+            if len(tag_name) > 64:
+                logger.warning(
+                    f"Ignoring tag '{tag_name}' (length {len(tag_name)}) as it exceeds maximum length of 64 characters"
+                )
+                continue
+
             tag = tag_cache.get(tag_name)
             if not tag:
                 tag = Tag(name=tag_name, owner=user)
@@ -106,7 +116,7 @@ def _create_missing_tags(netscape_bookmarks: List[NetscapeBookmark], user: User)
     Tag.objects.bulk_create(tags_to_create)
 
 
-def _get_batches(items: List, batch_size: int):
+def _get_batches(items: list, batch_size: int):
     batches = []
     offset = 0
     num_items = len(items)
@@ -121,29 +131,45 @@ def _get_batches(items: List, batch_size: int):
 
 
 def _import_batch(
-    netscape_bookmarks: List[NetscapeBookmark],
+    netscape_bookmarks: list[NetscapeBookmark],
     user: User,
     options: ImportOptions,
     tag_cache: TagCache,
     result: ImportResult,
 ):
     # Query existing bookmarks
-    batch_urls = [bookmark.href for bookmark in netscape_bookmarks]
-    existing_bookmarks = Bookmark.objects.filter(owner=user, url__in=batch_urls)
+    normalized_batch_urls = [
+        bookmark.href_normalized for bookmark in netscape_bookmarks
+    ]
+    existing_bookmarks = Bookmark.objects.filter(
+        owner=user, url_normalized__in=normalized_batch_urls
+    )
 
     # Create or update bookmarks from parsed Netscape bookmarks
     bookmarks_to_create = []
     bookmarks_to_update = []
 
+    # Track import bookmarks that were processed successfully
+    imported_in_batch = []
+
     for netscape_bookmark in netscape_bookmarks:
         result.total = result.total + 1
         try:
+            # Skip duplicates coming from the imported HTML
+            if netscape_bookmark.href_normalized in result.imported_urls:
+                logger.warning(
+                    "Skipping bookmark as its normalized URL is a duplicate of a bookmark found in the same HTML file: "
+                    + netscape_bookmark.href_normalized
+                )
+                result.failed = result.failed + 1
+                continue
+
             # Lookup existing bookmark by URL, or create new bookmark if there is no bookmark for that URL yet
             bookmark = next(
                 (
                     bookmark
                     for bookmark in existing_bookmarks
-                    if bookmark.url == netscape_bookmark.href
+                    if bookmark.url_normalized == netscape_bookmark.href_normalized
                 ),
                 None,
             )
@@ -164,7 +190,9 @@ def _import_batch(
                 bookmarks_to_create.append(bookmark)
 
             result.success = result.success + 1
-        except:
+            result.imported_urls.add(netscape_bookmark.href_normalized)
+            imported_in_batch.append(netscape_bookmark)
+        except Exception:
             shortened_bookmark_tag_str = str(netscape_bookmark)[:100] + "..."
             logging.exception("Error importing bookmark: " + shortened_bookmark_tag_str)
             result.failed = result.failed + 1
@@ -174,6 +202,7 @@ def _import_batch(
         bookmarks_to_update,
         [
             "url",
+            "url_normalized",
             "date_added",
             "date_modified",
             "unread",
@@ -190,18 +219,21 @@ def _import_batch(
     # Bulk assign tags
     # In Django 3, bulk_create does not return the auto-generated IDs when bulk inserting,
     # so we have to reload the inserted bookmarks, and match them to the parsed bookmarks by URL
-    existing_bookmarks = Bookmark.objects.filter(owner=user, url__in=batch_urls)
+    existing_bookmarks = Bookmark.objects.filter(
+        owner=user, url_normalized__in=normalized_batch_urls
+    )
 
     BookmarkToTagRelationShip = Bookmark.tags.through
     relationships = []
 
-    for netscape_bookmark in netscape_bookmarks:
+    # Iterate only over bookmarks that have been successfully imported
+    for netscape_bookmark in imported_in_batch:
         # Lookup bookmark by URL again
         bookmark = next(
             (
                 bookmark
                 for bookmark in existing_bookmarks
-                if bookmark.url == netscape_bookmark.href
+                if bookmark.url_normalized == netscape_bookmark.href_normalized
             ),
             None,
         )
@@ -227,11 +259,15 @@ def _copy_bookmark_data(
     netscape_bookmark: NetscapeBookmark, bookmark: Bookmark, options: ImportOptions
 ):
     bookmark.url = netscape_bookmark.href
+    bookmark.url_normalized = netscape_bookmark.href_normalized
     if netscape_bookmark.date_added:
         bookmark.date_added = parse_timestamp(netscape_bookmark.date_added)
     else:
         bookmark.date_added = timezone.now()
-    bookmark.date_modified = bookmark.date_added
+    if netscape_bookmark.date_modified:
+        bookmark.date_modified = parse_timestamp(netscape_bookmark.date_modified)
+    else:
+        bookmark.date_modified = bookmark.date_added
     bookmark.unread = netscape_bookmark.to_read
     if netscape_bookmark.title:
         bookmark.title = netscape_bookmark.title

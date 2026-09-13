@@ -1,5 +1,477 @@
 # Changelog
 
+## v1.47.0 (13/09/2026)
+
+### What's Changed
+* Only schedule snapshot tasks when there are pending snapshots by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1480
+* Add CORS support for the REST API by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1487
+* Add SSRF protection for server-side requests by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1488
+* Avoid reading assets into memory in full when viewing them in the UI by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1482
+* Fix custom CSS not working in sandboxed reader view by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1481
+* Bundle JS and CSS with esbuild by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1483
+
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.46.2...v1.47.0
+
+---
+
+## v1.46.2 (18/08/2026)
+
+### What's Changed
+* Render tag hash character with CSS so it can be hidden by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1447
+* Fix tag management not correctly linking to bookmarks page by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1452
+
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.46.1...v1.46.2
+
+---
+
+## v1.46.1 (14/08/2026)
+
+### What's Changed
+* Fix singlefile snapshots failing with old node version by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1445
+
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.46.0...v1.46.1
+
+---
+
+## v1.46.0 (09/08/2026)
+
+### What's Changed
+* Filter bundles by reading or sharing state by @dfederschmidt in https://github.com/sissbruecker/linkding/pull/1308
+* Support deleting tags through the API by @sethfitz in https://github.com/sissbruecker/linkding/pull/1411
+* Add sort by modification date option by @alwoodm in https://github.com/sissbruecker/linkding/pull/1363
+* Allow filtering RSS feeds by user name by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1436
+* Allow configuring session duration by @fardog in https://github.com/sissbruecker/linkding/pull/1295
+* Preserve page and scroll position when editing tags by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1291
+* Set empty alt-text on previews for better screenreader experience in https://github.com/sissbruecker/linkding/pull/1309
+* Use sandbox CSP for reader mode by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1402
+* Escape tag names in HTML export by @l0b0 in https://github.com/sissbruecker/linkding/pull/1378
+* Fix uploading assets with non-ascii characters in file name by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1403
+* Fix bookmarks not being de-duplicated on import by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1404
+* Retain query string when redirecting from root view by @TowyTowy in https://github.com/sissbruecker/linkding/pull/1416
+* Fix stray whitespace in tag cloud links by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1437
+* Debounce edits on URL field by @mdujava in https://github.com/sissbruecker/linkding/pull/1304
+* Increase padding on maskable PWA icons by @Nameless-Monster-Nerd in https://github.com/sissbruecker/linkding/pull/1428
+* Make init command initialize data dir by @alexlehm in https://github.com/sissbruecker/linkding/pull/1292
+* Clarify auto tagging behavior in API docs by @brdns in https://github.com/sissbruecker/linkding/pull/1385
+* Add note for using auth-proxies with rest-clients by @rktjmp in https://github.com/sissbruecker/linkding/pull/1297
+* Add linkding bot to community section by @mesamirh in https://github.com/sissbruecker/linkding/pull/1418
+* Add 'Save to Linkding' app to community section by @giuliomagnifico in https://github.com/sissbruecker/linkding/pull/1413
+* Add linkding for Safari extension to community section by @phmagic in https://github.com/sissbruecker/linkding/pull/1371
+* Add Ribbon iOS client to community section by @cdransf in https://github.com/sissbruecker/linkding/pull/1360
+* Add Tsundoku macOS client to community section by @gingerbeardman in https://github.com/sissbruecker/linkding/pull/1364
+* Add linkding-cleanup script to community section by @andrewferrier in https://github.com/sissbruecker/linkding/pull/1286
+
+
+### New Contributors
+* @alexlehm made their first contribution in https://github.com/sissbruecker/linkding/pull/1292
+* @dfederschmidt made their first contribution in https://github.com/sissbruecker/linkding/pull/1308
+* @brdns made their first contribution in https://github.com/sissbruecker/linkding/pull/1385
+* @l0b0 made their first contribution in https://github.com/sissbruecker/linkding/pull/1378
+* @mesamirh made their first contribution in https://github.com/sissbruecker/linkding/pull/1418
+* @giuliomagnifico made their first contribution in https://github.com/sissbruecker/linkding/pull/1413
+* @phmagic made their first contribution in https://github.com/sissbruecker/linkding/pull/1371
+* @cdransf made their first contribution in https://github.com/sissbruecker/linkding/pull/1360
+* @TowyTowy made their first contribution in https://github.com/sissbruecker/linkding/pull/1416
+* @sethfitz made their first contribution in https://github.com/sissbruecker/linkding/pull/1411
+* @alwoodm made their first contribution in https://github.com/sissbruecker/linkding/pull/1363
+* @rktjmp made their first contribution in https://github.com/sissbruecker/linkding/pull/1297
+* @fardog made their first contribution in https://github.com/sissbruecker/linkding/pull/1295
+* @mdujava made their first contribution in https://github.com/sissbruecker/linkding/pull/1304
+* @andrewferrier made their first contribution in https://github.com/sissbruecker/linkding/pull/1286
+* @Nameless-Monster-Nerd made their first contribution in https://github.com/sissbruecker/linkding/pull/1428
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.45.0...v1.46.0
+
+---
+
+## v1.45.0 (06/01/2026)
+
+### What's Changed
+* API token management by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1248
+* Add option to disable login form by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1269
+* Turn scheme-less URLs into HTTPS instead of HTTP links by @Maaxxs in https://github.com/sissbruecker/linkding/pull/1225
+* Disable bulk execute button when no bookmarks selected by @emanuelebeffa in https://github.com/sissbruecker/linkding/pull/1241
+* Add option to run supervisor as main process by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1270
+* Allow setting date_added and date_modified for new bookmarks through REST API by @jmason in https://github.com/sissbruecker/linkding/pull/1063
+* Download PDF instead of creating HTML snapshot if URL points at PDF by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1271
+* Allow sandboxed scripts when viewing assets by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1252
+* Allow viewing video assets by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1259
+* Remove absolute URIs from settings page by @packrat386 in https://github.com/sissbruecker/linkding/pull/1261
+* Move tag management forms into dialogs by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1253
+* Move bulk edit checkboxes into bookmark list container by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1257
+* Remove registration switch by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1268
+* Add linkdinger to community projects by @lmmendes in https://github.com/sissbruecker/linkding/pull/1266
+
+### New Contributors
+* @packrat386 made their first contribution in https://github.com/sissbruecker/linkding/pull/1261
+* @lmmendes made their first contribution in https://github.com/sissbruecker/linkding/pull/1266
+* @Maaxxs made their first contribution in https://github.com/sissbruecker/linkding/pull/1225
+* @emanuelebeffa made their first contribution in https://github.com/sissbruecker/linkding/pull/1241
+* @jmason made their first contribution in https://github.com/sissbruecker/linkding/pull/1063
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.44.2...v1.45.0
+
+---
+
+## v1.44.2 (13/12/2025)
+
+### What's Changed
+
+> [!WARNING] 
+> *This resolves a [security vulnerability](https://github.com/sissbruecker/linkding/security/advisories/GHSA-3pf9-5cjv-2w7q) in linkding. Everyone is encouraged to upgrade to the latest version as soon as possible.*
+
+* Use sandbox CSP for viewing assets by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1245
+* Fix devcontainer by @m3eno in https://github.com/sissbruecker/linkding/pull/1208
+* Fix tag cloud highlighting first char when tags are not grouped by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1209
+* Bump supervisor to 4.3.0 to fix warning by @simonhammes in https://github.com/sissbruecker/linkding/pull/1216
+* Added Javascript client and library for Linkding REST API by @vbsampath in https://github.com/sissbruecker/linkding/pull/1195
+* Add Komrade project to community resources by @dev-inside in https://github.com/sissbruecker/linkding/pull/1236
+
+### New Contributors
+* @m3eno made their first contribution in https://github.com/sissbruecker/linkding/pull/1208
+* @vbsampath made their first contribution in https://github.com/sissbruecker/linkding/pull/1195
+* @dev-inside made their first contribution in https://github.com/sissbruecker/linkding/pull/1236
+* @simonhammes made their first contribution in https://github.com/sissbruecker/linkding/pull/1216
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.44.1...v1.44.2
+
+---
+
+## v1.44.1 (11/10/2025)
+
+### What's Changed
+* Fix normalized URL not being generated in bookmark import by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1202
+* Fix missing tags causing errors in import with Postgres by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1203
+* Check for dupes by exact URL if normalized URL is missing by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1204
+* Attempt to fix botched normalized URL migration from 1.43.0 by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1205
+
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.44.0...v1.44.1
+
+---
+
+## v1.44.0 (05/10/2025)
+
+### What's Changed
+* Add new search engine that supports logical expressions (and, or, not) by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1198
+* Fix pagination links to use relative URLs by @dunlor in https://github.com/sissbruecker/linkding/pull/1186
+* Fix queued tasks link when context path is used by @dunlor in https://github.com/sissbruecker/linkding/pull/1187
+* Fix bundle preview pagination resetting to first page by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1194
+
+### New Contributors
+* @dunlor made their first contribution in https://github.com/sissbruecker/linkding/pull/1186
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.43.0...v1.44.0
+
+---
+
+## v1.43.0 (28/09/2025)
+
+### What's Changed
+* Add basic tag management by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1175
+* Normalize URLs when checking for duplicates by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1169
+* Add option to mark bookmarks as shared by default by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1170
+* Use modal dialog for confirming actions by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1168
+* Fix error when filtering bookmark assets in the admin UI by @proog in https://github.com/sissbruecker/linkding/pull/1162
+* Document API bundle filter by @proog in https://github.com/sissbruecker/linkding/pull/1161
+* Add alfred-linkding-bookmarks to community.md by @FireFingers21 in https://github.com/sissbruecker/linkding/pull/1160
+* Switch to uv by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1172
+* Replace Svelte components with Lit elements by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1174
+* Bump versions by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1173
+* Bump astro from 5.12.8 to 5.13.2 in /docs by @dependabot[bot] in https://github.com/sissbruecker/linkding/pull/1166
+* Bump vite from 6.3.5 to 6.3.6 in /docs by @dependabot[bot] in https://github.com/sissbruecker/linkding/pull/1184
+
+### New Contributors
+* @FireFingers21 made their first contribution in https://github.com/sissbruecker/linkding/pull/1160
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.42.0...v1.43.0
+
+---
+
+## v1.42.0 (16/08/2025)
+
+### What's Changed
+* Bulk create HTML snapshots by @Tql-ws1 in https://github.com/sissbruecker/linkding/pull/1132
+* Create bundle from current search query by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1154
+* Add alternative bookmarklet that uses browser metadata by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1159
+* Add date and time to HTML export filename by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1101
+* Automatically compress uploads with gzip by @hkclark in https://github.com/sissbruecker/linkding/pull/1087
+* Show bookmark bundles in admin by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1110
+* Allow filtering feeds by bundle by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1152
+* Submit bookmark form with Ctrl/Cmd + Enter by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1158
+* Improve bookmark form accessibility by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1116
+* Fix custom CSS not being used in reader mode by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1102
+* Use filename when downloading asset through UI by @proog in https://github.com/sissbruecker/linkding/pull/1146
+* Update order when deleting bundle by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1114
+* Wrap long titles in bookmark details modal by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1150
+* Ignore tags with just whitespace by @pvl in https://github.com/sissbruecker/linkding/pull/1125
+* Ignore tags that exceed length limit during import by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1153
+* Add CloudBreak on Managed Hosting by @benjaminoakes in https://github.com/sissbruecker/linkding/pull/1079
+* Add Pocket migration to to community page by @hkclark in https://github.com/sissbruecker/linkding/pull/1112
+* Add linkding-media-archiver to community.md by @proog in https://github.com/sissbruecker/linkding/pull/1144
+* Bump astro from 5.7.13 to 5.12.8 in /docs by @dependabot[bot] in https://github.com/sissbruecker/linkding/pull/1147
+
+### New Contributors
+* @hkclark made their first contribution in https://github.com/sissbruecker/linkding/pull/1087
+* @benjaminoakes made their first contribution in https://github.com/sissbruecker/linkding/pull/1079
+* @proog made their first contribution in https://github.com/sissbruecker/linkding/pull/1146
+* @pvl made their first contribution in https://github.com/sissbruecker/linkding/pull/1125
+* @Tql-ws1 made their first contribution in https://github.com/sissbruecker/linkding/pull/1132
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.41.0...v1.42.0
+
+---
+
+## v1.41.0 (19/06/2025)
+
+### What's Changed
+* Add bundles for organizing bookmarks by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1097
+* Add REST API for bookmark bundles by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1100
+* Add date filters for REST API by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1080
+* Fix side panel not being hidden on smaller viewports by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1089
+* Fix assets not using correct icon by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1098
+* Add LinkBuddy to community section by @peterto in https://github.com/sissbruecker/linkding/pull/1088
+* Bump tar-fs in /docs by @dependabot in https://github.com/sissbruecker/linkding/pull/1084
+* Bump django from 5.1.9 to 5.1.10 by @dependabot in https://github.com/sissbruecker/linkding/pull/1086
+* Bump requests from 2.32.3 to 2.32.4 by @dependabot in https://github.com/sissbruecker/linkding/pull/1090
+* Bump urllib3 from 2.2.3 to 2.5.0 by @dependabot in https://github.com/sissbruecker/linkding/pull/1096
+
+### New Contributors
+* @peterto made their first contribution in https://github.com/sissbruecker/linkding/pull/1088
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.40.0...v1.41.0
+
+---
+
+## v1.40.0 (17/05/2025)
+
+### What's Changed
+* Add bulk and single bookmark metadata refresh by @Teknicallity in https://github.com/sissbruecker/linkding/pull/999
+* Prefer local snapshot over web archive link in bookmark list links by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1021
+* Push Docker images to GHCR in addition to Docker Hub by @caycehouse in https://github.com/sissbruecker/linkding/pull/1024
+* Allow auto tagging rules to match URL fragments by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1045
+* Linkify plain URLs in notes by @sonicdoe in https://github.com/sissbruecker/linkding/pull/1051
+* Add opensearch declaration by @jzorn in https://github.com/sissbruecker/linkding/pull/1058
+* Allow pre-filling tags in new bookmark form by @dasrecht in https://github.com/sissbruecker/linkding/pull/1060
+* Handle lowercase "true" in environment variables by @jose-elias-alvarez in https://github.com/sissbruecker/linkding/pull/1020
+* Accessibility improvements in page structure by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1014
+* Improve announcements after navigation by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1015
+* Fix OIDC login link by @cite in https://github.com/sissbruecker/linkding/pull/1019
+* Fix bookmark asset download endpoint by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1033
+* Add docs for auto tagging by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1009
+* Fix typo in index.mdx tagline by @cenviity in https://github.com/sissbruecker/linkding/pull/1052
+* Add how-to for using linkding PWA in native Android share sheet by @kzshantonu in https://github.com/sissbruecker/linkding/pull/1055
+* Adding linktiles to community projects by @haondt in https://github.com/sissbruecker/linkding/pull/1025
+* Bump django from 5.1.5 to 5.1.7 by @dependabot in https://github.com/sissbruecker/linkding/pull/1007
+* Bump django from 5.1.7 to 5.1.8 by @dependabot in https://github.com/sissbruecker/linkding/pull/1030
+* Bump tar-fs in /docs by @dependabot in https://github.com/sissbruecker/linkding/pull/1028
+* Bump prismjs from 1.29.0 to 1.30.0 in /docs by @dependabot in https://github.com/sissbruecker/linkding/pull/1034
+* Bump @babel/helpers from 7.26.7 to 7.27.0 in /docs by @dependabot in https://github.com/sissbruecker/linkding/pull/1035
+* Bump vite from 5.4.14 to 5.4.17 in /docs by @dependabot in https://github.com/sissbruecker/linkding/pull/1036
+* Bump esbuild, @astrojs/starlight and astro in /docs by @dependabot in https://github.com/sissbruecker/linkding/pull/1037
+* Bump django from 5.1.8 to 5.1.9 by @dependabot in https://github.com/sissbruecker/linkding/pull/1059
+
+### New Contributors
+* @cite made their first contribution in https://github.com/sissbruecker/linkding/pull/1019
+* @jose-elias-alvarez made their first contribution in https://github.com/sissbruecker/linkding/pull/1020
+* @Teknicallity made their first contribution in https://github.com/sissbruecker/linkding/pull/999
+* @haondt made their first contribution in https://github.com/sissbruecker/linkding/pull/1025
+* @caycehouse made their first contribution in https://github.com/sissbruecker/linkding/pull/1024
+* @cenviity made their first contribution in https://github.com/sissbruecker/linkding/pull/1052
+* @sonicdoe made their first contribution in https://github.com/sissbruecker/linkding/pull/1051
+* @jzorn made their first contribution in https://github.com/sissbruecker/linkding/pull/1058
+* @dasrecht made their first contribution in https://github.com/sissbruecker/linkding/pull/1060
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.39.1...v1.40.0
+
+---
+
+## v1.39.1 (06/03/2025)
+
+> [!WARNING]
+> Due to changes in the release process the `1.39.0` Docker image accidentally runs the application in debug mode. Please upgrade to `1.39.1` instead.
+
+---
+
+## v1.39.0 (06/03/2025)
+
+### What's Changed
+* Add REST endpoint for uploading snapshots from the Singlefile extension by @sissbruecker in https://github.com/sissbruecker/linkding/pull/996
+* Add bookmark assets API by @sissbruecker in https://github.com/sissbruecker/linkding/pull/1003
+* Allow providing REST API authentication token with Bearer keyword by @sissbruecker in https://github.com/sissbruecker/linkding/pull/995
+* Add Telegram bot to community section by @marb08 in https://github.com/sissbruecker/linkding/pull/1001
+* Adding linklater to community projects by @nsartor in https://github.com/sissbruecker/linkding/pull/1002
+
+### New Contributors
+* @marb08 made their first contribution in https://github.com/sissbruecker/linkding/pull/1001
+* @nsartor made their first contribution in https://github.com/sissbruecker/linkding/pull/1002
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.38.1...v1.39.0
+
+---
+
+## v1.38.1 (22/02/2025)
+
+### What's Changed
+* Remove preview image when bookmark is deleted by @sissbruecker in https://github.com/sissbruecker/linkding/pull/989
+* Try limit uwsgi memory usage by configuring file descriptor limit by @sissbruecker in https://github.com/sissbruecker/linkding/pull/990
+* Add note about OIDC and LD_SUPERUSER_NAME combination by @tebriel in https://github.com/sissbruecker/linkding/pull/992
+* Return web archive fallback URL from REST API by @sissbruecker in https://github.com/sissbruecker/linkding/pull/993
+* Fix auth proxy logout by @sissbruecker in https://github.com/sissbruecker/linkding/pull/994
+
+### New Contributors
+* @tebriel made their first contribution in https://github.com/sissbruecker/linkding/pull/992
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.38.0...v1.38.1
+
+---
+
+## v1.38.0 (09/02/2025)
+
+### What's Changed
+* Fix nav menu closing on mousedown in Safari by @sissbruecker in https://github.com/sissbruecker/linkding/pull/965
+* Allow customizing username when creating user through OIDC by @kyuuk in https://github.com/sissbruecker/linkding/pull/971
+* Improve accessibility of modal dialogs by @sissbruecker in https://github.com/sissbruecker/linkding/pull/974
+* Add option to collapse side panel by @sissbruecker in https://github.com/sissbruecker/linkding/pull/975
+* Convert tag modal into drawer by @sissbruecker in https://github.com/sissbruecker/linkding/pull/977
+* Add RSS link to shared bookmarks page by @sissbruecker in https://github.com/sissbruecker/linkding/pull/984
+* Add Additional iOS Shortcut to community section by @joshdick in https://github.com/sissbruecker/linkding/pull/968
+
+### New Contributors
+* @kyuuk made their first contribution in https://github.com/sissbruecker/linkding/pull/971
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.37.0...v1.38.0
+
+---
+
+## v1.37.0 (26/01/2025)
+
+### What's Changed
+* Add option to disable request logs by @dmarcoux in https://github.com/sissbruecker/linkding/pull/887
+* Add default robots.txt to block crawlers by @sissbruecker in https://github.com/sissbruecker/linkding/pull/959
+* Fix menu dropdown focus traps by @sissbruecker in https://github.com/sissbruecker/linkding/pull/944
+* Provide accessible name to radio groups by @sissbruecker in https://github.com/sissbruecker/linkding/pull/945
+* Add serchding to community projects, sort the list by alphabetical order by @ldwgchen in https://github.com/sissbruecker/linkding/pull/880
+* Add cosmicding To Community Resources by @vkhitrin in https://github.com/sissbruecker/linkding/pull/892
+* Add 3 new community projects by @sebw in https://github.com/sissbruecker/linkding/pull/949
+* Add a rust client library to community.md by @zbrox in https://github.com/sissbruecker/linkding/pull/914
+* Update community.md by @justusthane in https://github.com/sissbruecker/linkding/pull/897
+* Bump astro from 4.15.8 to 4.16.3 in /docs by @dependabot in https://github.com/sissbruecker/linkding/pull/884
+* Bump vite from 5.4.9 to 5.4.14 in /docs by @dependabot in https://github.com/sissbruecker/linkding/pull/953
+* Bump django from 5.1.1 to 5.1.5 by @dependabot in https://github.com/sissbruecker/linkding/pull/947
+* Bump nanoid from 3.3.7 to 3.3.8 by @dependabot in https://github.com/sissbruecker/linkding/pull/928
+* Bump astro from 4.16.3 to 4.16.18 in /docs by @dependabot in https://github.com/sissbruecker/linkding/pull/929
+* Bump nanoid from 3.3.7 to 3.3.8 in /docs by @dependabot in https://github.com/sissbruecker/linkding/pull/962
+
+### New Contributors
+* @ldwgchen made their first contribution in https://github.com/sissbruecker/linkding/pull/880
+* @dmarcoux made their first contribution in https://github.com/sissbruecker/linkding/pull/887
+* @vkhitrin made their first contribution in https://github.com/sissbruecker/linkding/pull/892
+* @sebw made their first contribution in https://github.com/sissbruecker/linkding/pull/949
+* @justusthane made their first contribution in https://github.com/sissbruecker/linkding/pull/897
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.36.0...v1.37.0
+
+---
+
+## v1.36.0 (02/10/2024)
+
+### What's Changed
+* Replace uBlock Origin with uBlock Origin Lite by @sissbruecker in https://github.com/sissbruecker/linkding/pull/866
+* Add LAST_MODIFIED attribute when exporting by @ixzhao in https://github.com/sissbruecker/linkding/pull/860
+* Return client error status code for invalid form submissions by @sissbruecker in https://github.com/sissbruecker/linkding/pull/849
+* Fix header.svg text by @vladh in https://github.com/sissbruecker/linkding/pull/850
+* Do not clear fields in POST requests (API behavior change) by @sissbruecker in https://github.com/sissbruecker/linkding/pull/852
+* Prevent duplicates when editing by @sissbruecker in https://github.com/sissbruecker/linkding/pull/853
+* Fix jumping details modal on back navigation by @sissbruecker in https://github.com/sissbruecker/linkding/pull/854
+* Fix select dropdown menu background in dark theme by @sissbruecker in https://github.com/sissbruecker/linkding/pull/858
+* Do not escape valid characters in custom CSS by @sissbruecker in https://github.com/sissbruecker/linkding/pull/863
+* Simplify Docker build by @sissbruecker in https://github.com/sissbruecker/linkding/pull/865
+* Improve error handling for auto tagging by @sissbruecker in https://github.com/sissbruecker/linkding/pull/855
+* Bump rollup from 4.13.0 to 4.22.4 by @dependabot in https://github.com/sissbruecker/linkding/pull/851
+* Bump rollup from 4.21.3 to 4.22.4 in /docs by @dependabot in https://github.com/sissbruecker/linkding/pull/856
+
+### New Contributors
+* @vladh made their first contribution in https://github.com/sissbruecker/linkding/pull/850
+* @ixzhao made their first contribution in https://github.com/sissbruecker/linkding/pull/860
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.35.0...v1.36.0
+
+---
+
+## v1.35.0 (23/09/2024)
+
+### What's Changed
+* Add configuration options for pagination by @sissbruecker in https://github.com/sissbruecker/linkding/pull/835
+* Show placeholder if there is no preview image by @sissbruecker in https://github.com/sissbruecker/linkding/pull/842
+* Allow bookmarks to have empty title and description by @sissbruecker in https://github.com/sissbruecker/linkding/pull/843
+* Add clear buttons in bookmark form by @sissbruecker in https://github.com/sissbruecker/linkding/pull/846
+* Add basic fail2ban support by @sissbruecker in https://github.com/sissbruecker/linkding/pull/847
+* Add documentation website by @sissbruecker in https://github.com/sissbruecker/linkding/pull/833
+* Add go-linkding to community projects by @piero-vic in https://github.com/sissbruecker/linkding/pull/836
+* Fix a broken link to options documentation by @zbrox in https://github.com/sissbruecker/linkding/pull/844
+* Use HTTPS repository link for devcontainer by @voltagex in https://github.com/sissbruecker/linkding/pull/837
+* Bump requests version to 3.23.3 by @voltagex in https://github.com/sissbruecker/linkding/pull/839
+* Bump path-to-regexp and astro in /docs by @dependabot in https://github.com/sissbruecker/linkding/pull/840
+* Bump dependencies by @sissbruecker in https://github.com/sissbruecker/linkding/pull/841
+
+### New Contributors
+* @piero-vic made their first contribution in https://github.com/sissbruecker/linkding/pull/836
+* @voltagex made their first contribution in https://github.com/sissbruecker/linkding/pull/839
+* @zbrox made their first contribution in https://github.com/sissbruecker/linkding/pull/844
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.34.0...v1.35.0
+
+---
+
+## v1.34.0 (16/09/2024)
+
+### What's Changed
+* Fix several issues around browser back navigation by @sissbruecker in https://github.com/sissbruecker/linkding/pull/825
+* Speed up response times for certain actions by @sissbruecker in https://github.com/sissbruecker/linkding/pull/829
+* Implement IPv6 capability by @itz-Jana in https://github.com/sissbruecker/linkding/pull/826
+
+### New Contributors
+* @itz-Jana made their first contribution in https://github.com/sissbruecker/linkding/pull/826
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.33.0...v1.34.0
+
+---
+
+## v1.33.0 (14/09/2024)
+
+### What's Changed
+* Theme improvements by @sissbruecker in https://github.com/sissbruecker/linkding/pull/822
+* Speed up navigation by @sissbruecker in https://github.com/sissbruecker/linkding/pull/824
+* Rename "SingeFileError" to "SingleFileError" by @curiousleo in https://github.com/sissbruecker/linkding/pull/823
+* Bump svelte from 4.2.12 to 4.2.19 by @dependabot in https://github.com/sissbruecker/linkding/pull/806
+
+### New Contributors
+* @curiousleo made their first contribution in https://github.com/sissbruecker/linkding/pull/823
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.32.0...v1.33.0
+
+---
+
+## v1.32.0 (10/09/2024)
+
+### What's Changed
+* Allow configuring landing page for unauthenticated users by @sissbruecker in https://github.com/sissbruecker/linkding/pull/808
+* Allow configuring guest user profile by @sissbruecker in https://github.com/sissbruecker/linkding/pull/809
+* Return bookmark tags in RSS feeds by @sissbruecker in https://github.com/sissbruecker/linkding/pull/810
+* Additional filter parameters for RSS feeds by @sissbruecker in https://github.com/sissbruecker/linkding/pull/811
+* Allow pre-filling notes in new bookmark form by @sissbruecker in https://github.com/sissbruecker/linkding/pull/812
+* Fix inconsistent tag order in bookmarks by @sissbruecker in https://github.com/sissbruecker/linkding/pull/819
+* Fix auto-tagging when URL includes port by @sissbruecker in https://github.com/sissbruecker/linkding/pull/820
+
+
+**Full Changelog**: https://github.com/sissbruecker/linkding/compare/v1.31.1...v1.32.0
+
+---
+
 ## v1.31.1 (30/08/2024)
 
 ### What's Changed

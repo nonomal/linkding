@@ -5,13 +5,13 @@ from django.urls import reverse
 from bookmarks.models import Toast
 from bookmarks.tests.helpers import (
     BookmarkFactoryMixin,
-    random_sentence,
+    HtmlTestMixin,
     disable_logging,
+    random_sentence,
 )
 
 
-class ToastsViewTestCase(TestCase, BookmarkFactoryMixin):
-
+class ToastsViewTestCase(TestCase, BookmarkFactoryMixin, HtmlTestMixin):
     def setUp(self) -> None:
         user = self.get_or_create_test_user()
         self.client.force_login(user)
@@ -35,10 +35,10 @@ class ToastsViewTestCase(TestCase, BookmarkFactoryMixin):
         self.create_toast()
         self.create_toast(acknowledged=True)
 
-        response = self.client.get(reverse("bookmarks:index"))
+        response = self.client.get(reverse("linkding:bookmarks.index"))
 
         # Should render toasts container
-        self.assertContains(response, '<div class="toasts">')
+        self.assertContains(response, '<div class="message-list">')
         # Should render two toasts
         self.assertContains(response, '<div class="toast d-flex">', count=2)
 
@@ -47,10 +47,10 @@ class ToastsViewTestCase(TestCase, BookmarkFactoryMixin):
         self.create_toast(acknowledged=True)
         self.create_toast(acknowledged=True)
 
-        response = self.client.get(reverse("bookmarks:index"))
+        response = self.client.get(reverse("linkding:bookmarks.index"))
 
         # Should not render toasts container
-        self.assertContains(response, '<div class="toasts container grid-lg">', count=0)
+        self.assertContains(response, '<div class="message-list">', count=0)
         # Should not render toasts
         self.assertContains(response, '<div class="toast">', count=0)
 
@@ -63,20 +63,22 @@ class ToastsViewTestCase(TestCase, BookmarkFactoryMixin):
         self.create_toast(user=other_user)
         self.create_toast(user=other_user)
 
-        response = self.client.get(reverse("bookmarks:index"))
+        response = self.client.get(reverse("linkding:bookmarks.index"))
 
         # Should not render toasts container
-        self.assertContains(response, '<div class="toasts container grid-lg">', count=0)
+        self.assertContains(response, '<div class="message-list">', count=0)
         # Should not render toasts
         self.assertContains(response, '<div class="toast">', count=0)
 
     def test_form_tag(self):
         self.create_toast()
-        expected_form_tag = f'<form action="{reverse("bookmarks:toasts.acknowledge")}?return_url={reverse("bookmarks:index")}" method="post">'
+        expected_action = f"{reverse('linkding:toasts.acknowledge')}?return_url={reverse('linkding:bookmarks.index')}"
 
-        response = self.client.get(reverse("bookmarks:index"))
+        response = self.client.get(reverse("linkding:bookmarks.index"))
+        soup = self.make_soup(response.content.decode())
+        form = soup.find("form", attrs={"action": expected_action, "method": "post"})
 
-        self.assertContains(response, expected_form_tag)
+        self.assertIsNotNone(form)
 
     def test_toast_content(self):
         toast = self.create_toast()
@@ -87,7 +89,7 @@ class ToastsViewTestCase(TestCase, BookmarkFactoryMixin):
             </div>        
         """
 
-        response = self.client.get(reverse("bookmarks:index"))
+        response = self.client.get(reverse("linkding:bookmarks.index"))
         html = response.content.decode()
 
         self.assertInHTML(expected_toast, html)
@@ -96,7 +98,7 @@ class ToastsViewTestCase(TestCase, BookmarkFactoryMixin):
         toast = self.create_toast()
 
         self.client.post(
-            reverse("bookmarks:toasts.acknowledge"),
+            reverse("linkding:toasts.acknowledge"),
             {
                 "toast": [toast.id],
             },
@@ -107,8 +109,8 @@ class ToastsViewTestCase(TestCase, BookmarkFactoryMixin):
 
     def test_acknowledge_toast_should_redirect_to_return_url(self):
         toast = self.create_toast()
-        return_url = reverse("bookmarks:settings.general")
-        acknowledge_url = reverse("bookmarks:toasts.acknowledge")
+        return_url = reverse("linkding:settings.general")
+        acknowledge_url = reverse("linkding:toasts.acknowledge")
         acknowledge_url = acknowledge_url + "?return_url=" + return_url
 
         response = self.client.post(
@@ -124,13 +126,13 @@ class ToastsViewTestCase(TestCase, BookmarkFactoryMixin):
         toast = self.create_toast()
 
         response = self.client.post(
-            reverse("bookmarks:toasts.acknowledge"),
+            reverse("linkding:toasts.acknowledge"),
             {
                 "toast": [toast.id],
             },
         )
 
-        self.assertRedirects(response, reverse("bookmarks:index"))
+        self.assertRedirects(response, reverse("linkding:bookmarks.index"))
 
     @disable_logging
     def test_acknowledge_toast_should_not_acknowledge_other_users_toast(self):
@@ -140,7 +142,7 @@ class ToastsViewTestCase(TestCase, BookmarkFactoryMixin):
         toast = self.create_toast(user=other_user)
 
         response = self.client.post(
-            reverse("bookmarks:toasts.acknowledge"),
+            reverse("linkding:toasts.acknowledge"),
             {
                 "toast": [toast.id],
             },

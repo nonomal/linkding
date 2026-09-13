@@ -1,18 +1,21 @@
+import contextlib
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from typing import Dict, List
 
 from bookmarks.models import parse_tag_string
+from bookmarks.utils import normalize_url
 
 
 @dataclass
 class NetscapeBookmark:
     href: str
+    href_normalized: str
     title: str
     description: str
     notes: str
     date_added: str
-    tag_names: List[str]
+    date_modified: str
+    tag_names: list[str]
     to_read: bool
     private: bool
     archived: bool
@@ -27,6 +30,7 @@ class BookmarkParser(HTMLParser):
         self.bookmark = None
         self.href = ""
         self.add_date = ""
+        self.last_modified = ""
         self.tags = ""
         self.title = ""
         self.description = ""
@@ -54,24 +58,24 @@ class BookmarkParser(HTMLParser):
     def handle_end_dl(self):
         self.add_bookmark()
 
-    def handle_start_dt(self, attrs: Dict[str, str]):
+    def handle_start_dt(self, attrs: dict[str, str]):
         self.add_bookmark()
 
-    def handle_start_a(self, attrs: Dict[str, str]):
+    def handle_start_a(self, attrs: dict[str, str]):
         vars(self).update(attrs)
         tag_names = parse_tag_string(self.tags)
-        archived = "linkding:archived" in self.tags
-        try:
-            tag_names.remove("linkding:archived")
-        except ValueError:
-            pass
+        archived = "linkding:bookmarks.archived" in self.tags
+        with contextlib.suppress(ValueError):
+            tag_names.remove("linkding:bookmarks.archived")
 
         self.bookmark = NetscapeBookmark(
             href=self.href,
+            href_normalized=normalize_url(self.href),
             title="",
             description="",
             notes="",
             date_added=self.add_date,
+            date_modified=self.last_modified,
             tag_names=tag_names,
             to_read=self.toread == "1",
             # Mark as private by default, also when attribute is not specified
@@ -97,6 +101,7 @@ class BookmarkParser(HTMLParser):
         self.bookmark = None
         self.href = ""
         self.add_date = ""
+        self.last_modified = ""
         self.tags = ""
         self.title = ""
         self.description = ""
@@ -105,7 +110,7 @@ class BookmarkParser(HTMLParser):
         self.private = ""
 
 
-def parse(html: str) -> List[NetscapeBookmark]:
+def parse(html: str) -> list[NetscapeBookmark]:
     parser = BookmarkParser()
     parser.feed(html)
     return parser.bookmarks

@@ -1,38 +1,37 @@
 import logging
-import os
-from typing import Union
 
-from django.conf import settings
-from django.contrib.auth.models import User
-from django.core.files.uploadedfile import UploadedFile
 from django.utils import timezone
 
-from bookmarks.models import Bookmark, BookmarkAsset, parse_tag_string
-from bookmarks.services import tasks
-from bookmarks.services import website_loader
-from bookmarks.services import auto_tagging
+from bookmarks.models import Bookmark, User, parse_tag_string
+from bookmarks.services import auto_tagging, tasks, website_loader
 from bookmarks.services.tags import get_or_create_tags
 
 logger = logging.getLogger(__name__)
 
 
-def create_bookmark(bookmark: Bookmark, tag_string: str, current_user: User):
+def create_bookmark(
+    bookmark: Bookmark,
+    tag_string: str,
+    current_user: User,
+    disable_html_snapshot: bool = False,
+):
     # If URL is already bookmarked, then update it
-    existing_bookmark: Bookmark = Bookmark.objects.filter(
-        owner=current_user, url=bookmark.url
+    existing_bookmark: Bookmark = Bookmark.query_existing(
+        current_user, bookmark.url
     ).first()
 
     if existing_bookmark is not None:
         _merge_bookmark_data(bookmark, existing_bookmark)
         return update_bookmark(existing_bookmark, tag_string, current_user)
 
-    # Update website info
-    _update_website_metadata(bookmark)
     # Set currently logged in user as owner
     bookmark.owner = current_user
-    # Set dates
-    bookmark.date_added = timezone.now()
-    bookmark.date_modified = timezone.now()
+    # Set dates only if not already provided
+    # This allows to sync existing dates through the REST API for example
+    if not bookmark.date_added:
+        bookmark.date_added = timezone.now()
+    if not bookmark.date_modified:
+        bookmark.date_modified = timezone.now()
     bookmark.save()
     # Update tag list
     _update_bookmark_tags(bookmark, tag_string, current_user)
@@ -44,7 +43,10 @@ def create_bookmark(bookmark: Bookmark, tag_string: str, current_user: User):
     # Load preview image
     tasks.load_preview_image(current_user, bookmark)
     # Create HTML snapshot
-    if current_user.profile.enable_automatic_html_snapshots:
+    if (
+        current_user.profile.enable_automatic_html_snapshots
+        and not disable_html_snapshot
+    ):
         tasks.create_html_snapshot(bookmark)
 
     return bookmark
@@ -67,11 +69,19 @@ def update_bookmark(bookmark: Bookmark, tag_string, current_user: User):
     if has_url_changed:
         # Update web archive snapshot, if URL changed
         tasks.create_web_archive_snapshot(current_user, bookmark, True)
-        # Only update website metadata if URL changed
-        _update_website_metadata(bookmark)
-        bookmark.save()
 
     return bookmark
+
+
+def enhance_with_website_metadata(bookmark: Bookmark):
+    metadata = website_loader.load_website_metadata(bookmark.url)
+    if not bookmark.title:
+        bookmark.title = metadata.title or ""
+
+    if not bookmark.description:
+        bookmark.description = metadata.description or ""
+
+    bookmark.save()
 
 
 def archive_bookmark(bookmark: Bookmark):
@@ -81,7 +91,7 @@ def archive_bookmark(bookmark: Bookmark):
     return bookmark
 
 
-def archive_bookmarks(bookmark_ids: [Union[int, str]], current_user: User):
+def archive_bookmarks(bookmark_ids: [int | str], current_user: User):
     sanitized_bookmark_ids = _sanitize_id_list(bookmark_ids)
 
     Bookmark.objects.filter(owner=current_user, id__in=sanitized_bookmark_ids).update(
@@ -96,7 +106,7 @@ def unarchive_bookmark(bookmark: Bookmark):
     return bookmark
 
 
-def unarchive_bookmarks(bookmark_ids: [Union[int, str]], current_user: User):
+def unarchive_bookmarks(bookmark_ids: [int | str], current_user: User):
     sanitized_bookmark_ids = _sanitize_id_list(bookmark_ids)
 
     Bookmark.objects.filter(owner=current_user, id__in=sanitized_bookmark_ids).update(
@@ -104,13 +114,13 @@ def unarchive_bookmarks(bookmark_ids: [Union[int, str]], current_user: User):
     )
 
 
-def delete_bookmarks(bookmark_ids: [Union[int, str]], current_user: User):
+def delete_bookmarks(bookmark_ids: [int | str], current_user: User):
     sanitized_bookmark_ids = _sanitize_id_list(bookmark_ids)
 
     Bookmark.objects.filter(owner=current_user, id__in=sanitized_bookmark_ids).delete()
 
 
-def tag_bookmarks(bookmark_ids: [Union[int, str]], tag_string: str, current_user: User):
+def tag_bookmarks(bookmark_ids: [int | str], tag_string: str, current_user: User):
     sanitized_bookmark_ids = _sanitize_id_list(bookmark_ids)
     owned_bookmark_ids = Bookmark.objects.filter(
         owner=current_user, id__in=sanitized_bookmark_ids
@@ -133,9 +143,7 @@ def tag_bookmarks(bookmark_ids: [Union[int, str]], tag_string: str, current_user
     )
 
 
-def untag_bookmarks(
-    bookmark_ids: [Union[int, str]], tag_string: str, current_user: User
-):
+def untag_bookmarks(bookmark_ids: [int | str], tag_string: str, current_user: User):
     sanitized_bookmark_ids = _sanitize_id_list(bookmark_ids)
     owned_bookmark_ids = Bookmark.objects.filter(
         owner=current_user, id__in=sanitized_bookmark_ids
@@ -155,7 +163,7 @@ def untag_bookmarks(
     )
 
 
-def mark_bookmarks_as_read(bookmark_ids: [Union[int, str]], current_user: User):
+def mark_bookmarks_as_read(bookmark_ids: [int | str], current_user: User):
     sanitized_bookmark_ids = _sanitize_id_list(bookmark_ids)
 
     Bookmark.objects.filter(owner=current_user, id__in=sanitized_bookmark_ids).update(
@@ -163,7 +171,7 @@ def mark_bookmarks_as_read(bookmark_ids: [Union[int, str]], current_user: User):
     )
 
 
-def mark_bookmarks_as_unread(bookmark_ids: [Union[int, str]], current_user: User):
+def mark_bookmarks_as_unread(bookmark_ids: [int | str], current_user: User):
     sanitized_bookmark_ids = _sanitize_id_list(bookmark_ids)
 
     Bookmark.objects.filter(owner=current_user, id__in=sanitized_bookmark_ids).update(
@@ -171,7 +179,7 @@ def mark_bookmarks_as_unread(bookmark_ids: [Union[int, str]], current_user: User
     )
 
 
-def share_bookmarks(bookmark_ids: [Union[int, str]], current_user: User):
+def share_bookmarks(bookmark_ids: [int | str], current_user: User):
     sanitized_bookmark_ids = _sanitize_id_list(bookmark_ids)
 
     Bookmark.objects.filter(owner=current_user, id__in=sanitized_bookmark_ids).update(
@@ -179,7 +187,7 @@ def share_bookmarks(bookmark_ids: [Union[int, str]], current_user: User):
     )
 
 
-def unshare_bookmarks(bookmark_ids: [Union[int, str]], current_user: User):
+def unshare_bookmarks(bookmark_ids: [int | str], current_user: User):
     sanitized_bookmark_ids = _sanitize_id_list(bookmark_ids)
 
     Bookmark.objects.filter(owner=current_user, id__in=sanitized_bookmark_ids).update(
@@ -187,44 +195,24 @@ def unshare_bookmarks(bookmark_ids: [Union[int, str]], current_user: User):
     )
 
 
-def _generate_upload_asset_filename(asset: BookmarkAsset, filename: str):
-    formatted_datetime = asset.date_created.strftime("%Y-%m-%d_%H%M%S")
-    return f"{asset.asset_type}_{formatted_datetime}_{filename}"
-
-
-def upload_asset(bookmark: Bookmark, upload_file: UploadedFile) -> BookmarkAsset:
-    asset = BookmarkAsset(
-        bookmark=bookmark,
-        asset_type=BookmarkAsset.TYPE_UPLOAD,
-        content_type=upload_file.content_type,
-        display_name=upload_file.name,
-        status=BookmarkAsset.STATUS_PENDING,
-        gzip=False,
+def refresh_bookmarks_metadata(bookmark_ids: [int | str], current_user: User):
+    sanitized_bookmark_ids = _sanitize_id_list(bookmark_ids)
+    owned_bookmarks = Bookmark.objects.filter(
+        owner=current_user, id__in=sanitized_bookmark_ids
     )
-    asset.save()
 
-    try:
-        filename = _generate_upload_asset_filename(asset, upload_file.name)
-        filepath = os.path.join(settings.LD_ASSET_FOLDER, filename)
-        with open(filepath, "wb") as f:
-            for chunk in upload_file.chunks():
-                f.write(chunk)
-        asset.status = BookmarkAsset.STATUS_COMPLETE
-        asset.file = filename
-        asset.file_size = upload_file.size
-        logger.info(
-            f"Successfully uploaded asset file. bookmark={bookmark} file={upload_file.name}"
-        )
-    except Exception as e:
-        logger.error(
-            f"Failed to upload asset file. bookmark={bookmark} file={upload_file.name}",
-            exc_info=e,
-        )
-        asset.status = BookmarkAsset.STATUS_FAILURE
+    for bookmark in owned_bookmarks:
+        tasks.refresh_metadata(bookmark)
+        tasks.load_preview_image(current_user, bookmark)
 
-    asset.save()
 
-    return asset
+def create_html_snapshots(bookmark_ids: list[int | str], current_user: User):
+    sanitized_bookmark_ids = _sanitize_id_list(bookmark_ids)
+    owned_bookmarks = Bookmark.objects.filter(
+        owner=current_user, id__in=sanitized_bookmark_ids
+    )
+
+    tasks.create_html_snapshots(owned_bookmarks)
 
 
 def _merge_bookmark_data(from_bookmark: Bookmark, to_bookmark: Bookmark):
@@ -233,12 +221,6 @@ def _merge_bookmark_data(from_bookmark: Bookmark, to_bookmark: Bookmark):
     to_bookmark.notes = from_bookmark.notes
     to_bookmark.unread = from_bookmark.unread
     to_bookmark.shared = from_bookmark.shared
-
-
-def _update_website_metadata(bookmark: Bookmark):
-    metadata = website_loader.load_website_metadata(bookmark.url)
-    bookmark.website_title = metadata.title
-    bookmark.website_description = metadata.description
 
 
 def _update_bookmark_tags(bookmark: Bookmark, tag_string: str, user: User):
@@ -262,6 +244,6 @@ def _update_bookmark_tags(bookmark: Bookmark, tag_string: str, user: User):
     bookmark.tags.set(tags)
 
 
-def _sanitize_id_list(bookmark_ids: [Union[int, str]]) -> [int]:
+def _sanitize_id_list(bookmark_ids: [int | str]) -> [int]:
     # Convert string ids to int if necessary
     return [int(bm_id) if isinstance(bm_id, str) else bm_id for bm_id in bookmark_ids]

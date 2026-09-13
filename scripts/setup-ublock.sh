@@ -1,13 +1,23 @@
-rm -rf ublock0.chromium
+#!/bin/sh
+# Also used by the Docker builds to set up uBlock Origin Lite, see docker/*.Dockerfile
+set -e
 
-TAG=$(curl -sL https://api.github.com/repos/gorhill/uBlock/releases/latest | jq -r '.tag_name')
-DOWNLOAD_URL=https://github.com/gorhill/uBlock/releases/download/$TAG/uBlock0_$TAG.chromium.zip
-curl -L -o uBlock0.zip $DOWNLOAD_URL
-unzip uBlock0.zip
-rm uBlock0.zip
+rm -rf uBOLite.chromium.mv3
 
-curl -L -o ./uBlock0.chromium/assets/thirdparties/easylist/easylist-cookies.txt https://ublockorigin.github.io/uAssets/thirdparties/easylist-cookies.txt
-jq '."assets.json" |= del(.cdnURLs) | ."assets.json".contentURL = ["assets/assets.json"] | ."fanboy-cookiemonster" |= del(.off) | ."fanboy-cookiemonster".contentURL += ["assets/thirdparties/easylist/easylist-cookies.txt"]' ./uBlock0.chromium/assets/assets.json > temp.json
-mv temp.json ./uBlock0.chromium/assets/assets.json
+# Download the latest stable uBlock Origin Lite release with a Chromium asset
+DOWNLOAD_URL=$(curl -fsSL "https://api.github.com/repos/uBlockOrigin/uBOL-home/releases?per_page=20" | \
+  jq -r 'first(.[] | select(.prerelease == false) | .assets[] | select(.name | endswith(".chromium.zip")) | .browser_download_url) // empty')
+if [ -z "$DOWNLOAD_URL" ]; then
+  echo "No uBlock Origin Lite release with a .chromium.zip asset found (or the GitHub API is unavailable / rate limited)" >&2
+  exit 1
+fi
+echo "Downloading $DOWNLOAD_URL"
+curl -fL -o uBOLite.zip "$DOWNLOAD_URL"
+unzip uBOLite.zip -d uBOLite.chromium.mv3
+rm uBOLite.zip
+
+# Enable annoyances rulesets in manifest.json
+jq '.declarative_net_request.rule_resources |= map(if .id == "annoyances-overlays" or .id == "annoyances-cookies" or .id == "annoyances-social" or .id == "annoyances-widgets" or .id == "annoyances-others" then .enabled = true else . end)' uBOLite.chromium.mv3/manifest.json > temp.json
+mv temp.json uBOLite.chromium.mv3/manifest.json
 
 mkdir -p chromium-profile

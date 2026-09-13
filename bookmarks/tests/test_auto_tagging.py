@@ -1,5 +1,6 @@
-from bookmarks.services import auto_tagging
 from django.test import TestCase
+
+from bookmarks.services import auto_tagging
 
 
 class AutoTaggingTestCase(TestCase):
@@ -13,6 +14,20 @@ class AutoTaggingTestCase(TestCase):
         tags = auto_tagging.get_tags(script, url)
 
         self.assertEqual(tags, {"example"})
+
+    def test_auto_tag_by_domain_handles_invalid_urls(self):
+        script = """
+            example.com example
+            test.com test
+        """
+
+        url = "https://"
+        tags = auto_tagging.get_tags(script, url)
+        self.assertEqual(tags, set([]))
+
+        url = "example.com"
+        tags = auto_tagging.get_tags(script, url)
+        self.assertEqual(tags, set([]))
 
     def test_auto_tag_by_domain_works_with_port(self):
         script = """
@@ -188,3 +203,44 @@ class AutoTaggingTestCase(TestCase):
         tags = auto_tagging.get_tags(script, url)
 
         self.assertEqual(tags, {"tag1", "tag2"})
+
+    def test_auto_tag_with_url_fragment(self):
+        script = """
+            example.com/#/section/1 section1
+            example.com/#/section/2 section2
+        """
+        url = "https://example.com/#/section/1"
+
+        tags = auto_tagging.get_tags(script, url)
+
+        self.assertEqual(tags, {"section1"})
+
+    def test_auto_tag_with_url_fragment_partial_match(self):
+        script = """
+            example.com/#/section section
+        """
+        url = "https://example.com/#/section/1"
+
+        tags = auto_tagging.get_tags(script, url)
+
+        self.assertEqual(tags, {"section"})
+
+    def test_auto_tag_with_url_fragment_ignores_case(self):
+        script = """
+            example.com/#SECTION section
+        """
+        url = "https://example.com/#section"
+
+        tags = auto_tagging.get_tags(script, url)
+
+        self.assertEqual(tags, {"section"})
+
+    def test_auto_tag_with_url_fragment_and_comment(self):
+        script = """
+            example.com/#section1 section1 #This is a comment
+        """
+        url = "https://example.com/#section1"
+
+        tags = auto_tagging.get_tags(script, url)
+
+        self.assertEqual(tags, {"section1"})

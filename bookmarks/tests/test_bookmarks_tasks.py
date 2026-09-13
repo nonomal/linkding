@@ -1,15 +1,14 @@
-import os.path
 from unittest import mock
 
 import waybackpy
-from django.conf import settings
 from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from huey.contrib.djhuey import HUEY as huey
 from waybackpy.exceptions import WaybackError
 
 from bookmarks.models import BookmarkAsset, UserProfile
-from bookmarks.services import tasks, singlefile
+from bookmarks.services import tasks
+from bookmarks.services.website_loader import WebsiteMetadata
 from bookmarks.tests.helpers import BookmarkFactoryMixin
 
 
@@ -26,7 +25,6 @@ def create_wayback_machine_save_api_mock(
 
 
 class BookmarkTasksTestCase(TestCase, BookmarkFactoryMixin):
-
     def setUp(self):
         huey.immediate = True
         huey.results = True
@@ -46,12 +44,13 @@ class BookmarkTasksTestCase(TestCase, BookmarkFactoryMixin):
         self.mock_load_favicon = self.mock_load_favicon_patcher.start()
         self.mock_load_favicon.return_value = "https_example_com.png"
 
-        self.mock_singlefile_create_snapshot_patcher = mock.patch(
-            "bookmarks.services.singlefile.create_snapshot",
+        self.mock_assets_create_snapshot_patcher = mock.patch(
+            "bookmarks.services.assets.create_snapshot",
         )
-        self.mock_singlefile_create_snapshot = (
-            self.mock_singlefile_create_snapshot_patcher.start()
+        self.mock_assets_create_snapshot = (
+            self.mock_assets_create_snapshot_patcher.start()
         )
+        self.mock_assets_create_snapshot.side_effect = self.complete_asset
 
         self.mock_load_preview_image_patcher = mock.patch(
             "bookmarks.services.preview_image_loader.load_preview_image"
@@ -70,13 +69,22 @@ class BookmarkTasksTestCase(TestCase, BookmarkFactoryMixin):
     def tearDown(self):
         self.mock_save_api_patcher.stop()
         self.mock_load_favicon_patcher.stop()
-        self.mock_singlefile_create_snapshot_patcher.stop()
+        self.mock_assets_create_snapshot_patcher.stop()
         self.mock_load_preview_image_patcher.stop()
         huey.storage.flush_results()
         huey.immediate = False
 
     def executed_count(self):
         return len(huey.all_results())
+
+    def complete_asset(self, asset: BookmarkAsset):
+        asset.status = BookmarkAsset.STATUS_COMPLETE
+        asset.save()
+
+    def fail_asset(self, asset: BookmarkAsset):
+        asset.status = BookmarkAsset.STATUS_FAILURE
+        asset.save()
+        raise Exception("Boom")
 
     def test_create_web_archive_snapshot_should_update_snapshot_url(self):
         bookmark = self.setup_bookmark()
@@ -473,7 +481,7 @@ class BookmarkTasksTestCase(TestCase, BookmarkFactoryMixin):
         bookmark = self.setup_bookmark()
 
         # Mock the task function to avoid running it immediately
-        with mock.patch("bookmarks.services.tasks._create_html_snapshot_task"):
+        with mock.patch("bookmarks.services.tasks._process_html_snapshots_task"):
             tasks.create_html_snapshot(bookmark)
             self.assertEqual(BookmarkAsset.objects.count(), 1)
 
@@ -484,76 +492,206 @@ class BookmarkTasksTestCase(TestCase, BookmarkFactoryMixin):
             for asset in assets:
                 self.assertEqual(asset.bookmark, bookmark)
                 self.assertEqual(asset.asset_type, BookmarkAsset.TYPE_SNAPSHOT)
-                self.assertEqual(asset.content_type, BookmarkAsset.CONTENT_TYPE_HTML)
-                self.assertIn("HTML snapshot", asset.display_name)
+                self.assertEqual(asset.content_type, "")
+                self.assertIn("New snapshot", asset.display_name)
                 self.assertEqual(asset.status, BookmarkAsset.STATUS_PENDING)
 
+            self.mock_assets_create_snapshot.assert_not_called()
+
     @override_settings(LD_ENABLE_SNAPSHOTS=True)
-    def test_create_html_snapshot_should_update_file_info(self):
-        bookmark = self.setup_bookmark(url="https://example.com")
+    def test_create_html_snapshot_should_process_pending_assets(self):
+        bookmark = self.setup_bookmark()
 
         with mock.patch(
-            "bookmarks.services.tasks._generate_snapshot_filename"
-        ) as mock_generate:
-            expected_filename = "snapshot_2021-01-02_034455_https___example.com.html.gz"
-            mock_generate.return_value = expected_filename
-
+            "bookmarks.services.tasks._process_html_snapshots_task"
+        ) as mock_process_html_snapshots_task:
             tasks.create_html_snapshot(bookmark)
-            BookmarkAsset.objects.get(bookmark=bookmark)
 
-            # Run periodic task to process the snapshot
-            tasks._schedule_html_snapshots_task()
-
-            self.mock_singlefile_create_snapshot.assert_called_once_with(
-                "https://example.com",
-                os.path.join(
-                    settings.LD_ASSET_FOLDER,
-                    expected_filename,
-                ),
-            )
-
-            asset = BookmarkAsset.objects.get(bookmark=bookmark)
-            self.assertEqual(asset.status, BookmarkAsset.STATUS_COMPLETE)
-            self.assertEqual(asset.file, expected_filename)
-            self.assertTrue(asset.gzip)
+            mock_process_html_snapshots_task.assert_called_once()
 
     @override_settings(LD_ENABLE_SNAPSHOTS=True)
-    def test_create_html_snapshot_truncate_filename(self):
-        # Create a bookmark with a very long URL
-        long_url = "http://" + "a" * 300 + ".com"
-        bookmark = self.setup_bookmark(url=long_url)
+    def test_create_html_snapshots_should_process_pending_assets(self):
+        bookmarks = [self.setup_bookmark(), self.setup_bookmark()]
 
-        tasks.create_html_snapshot(bookmark)
-        BookmarkAsset.objects.get(bookmark=bookmark)
+        with mock.patch(
+            "bookmarks.services.tasks._process_html_snapshots_task"
+        ) as mock_process_html_snapshots_task:
+            tasks.create_html_snapshots(bookmarks)
 
-        # Run periodic task to process the snapshot
-        tasks._schedule_html_snapshots_task()
-
-        asset = BookmarkAsset.objects.get(bookmark=bookmark)
-        self.assertEqual(len(asset.file), 192)
+            self.assertEqual(BookmarkAsset.objects.count(), 2)
+            mock_process_html_snapshots_task.assert_called_once()
 
     @override_settings(LD_ENABLE_SNAPSHOTS=True)
-    def test_create_html_snapshot_should_handle_error(self):
+    def test_create_html_snapshot_should_not_process_when_task_is_running(self):
+        bookmark = self.setup_bookmark()
+
+        with (
+            mock.patch(
+                "bookmarks.services.tasks._process_html_snapshots_task"
+            ) as mock_process_html_snapshots_task,
+            tasks._html_snapshot_lock,
+        ):
+            tasks.create_html_snapshot(bookmark)
+
+            self.assertEqual(BookmarkAsset.objects.count(), 1)
+            mock_process_html_snapshots_task.assert_not_called()
+
+    @override_settings(LD_ENABLE_SNAPSHOTS=True)
+    def test_create_html_snapshots_should_not_process_when_task_is_running(self):
+        bookmarks = [self.setup_bookmark(), self.setup_bookmark()]
+
+        with (
+            mock.patch(
+                "bookmarks.services.tasks._process_html_snapshots_task"
+            ) as mock_process_html_snapshots_task,
+            tasks._html_snapshot_lock,
+        ):
+            tasks.create_html_snapshots(bookmarks)
+
+            self.assertEqual(BookmarkAsset.objects.count(), 2)
+            mock_process_html_snapshots_task.assert_not_called()
+
+    @override_settings(LD_ENABLE_SNAPSHOTS=True)
+    def test_process_html_snapshots_should_create_snapshots_in_sequence(self):
         bookmark = self.setup_bookmark(url="https://example.com")
 
-        self.mock_singlefile_create_snapshot.side_effect = singlefile.SingeFileError(
-            "Error"
+        with mock.patch("bookmarks.services.tasks._process_html_snapshots_task"):
+            tasks.create_html_snapshot(bookmark)
+            tasks.create_html_snapshot(bookmark)
+            tasks.create_html_snapshot(bookmark)
+
+        assets = list(
+            BookmarkAsset.objects.filter(bookmark=bookmark).order_by("date_created")
         )
-        tasks.create_html_snapshot(bookmark)
 
-        # Run periodic task to process the snapshot
-        tasks._schedule_html_snapshots_task()
+        tasks._process_html_snapshots_task()
 
-        asset = BookmarkAsset.objects.get(bookmark=bookmark)
-        self.assertEqual(asset.status, BookmarkAsset.STATUS_FAILURE)
-        self.assertEqual(asset.file, "")
-        self.assertFalse(asset.gzip)
+        # should call create_snapshot for each pending asset, in the order in
+        # which the assets were created
+        self.assertEqual(
+            self.mock_assets_create_snapshot.call_args_list,
+            [mock.call(asset) for asset in assets],
+        )
 
     @override_settings(LD_ENABLE_SNAPSHOTS=True)
-    def test_create_html_snapshot_should_handle_missing_bookmark(self):
-        tasks._create_html_snapshot_task(123)
+    def test_process_html_snapshots_should_ignore_processed_assets(self):
+        bookmark = self.setup_bookmark()
+        self.setup_asset(bookmark, status=BookmarkAsset.STATUS_COMPLETE)
+        self.setup_asset(bookmark, status=BookmarkAsset.STATUS_FAILURE)
 
-        self.mock_singlefile_create_snapshot.assert_not_called()
+        tasks._process_html_snapshots_task()
+
+        self.mock_assets_create_snapshot.assert_not_called()
+
+    @override_settings(LD_ENABLE_SNAPSHOTS=False)
+    def test_process_html_snapshots_should_not_create_snapshots_when_disabled(self):
+        bookmark = self.setup_bookmark()
+        self.setup_asset(bookmark, status=BookmarkAsset.STATUS_PENDING)
+
+        tasks._process_html_snapshots_task()
+
+        self.mock_assets_create_snapshot.assert_not_called()
+
+    @override_settings(LD_ENABLE_SNAPSHOTS=True)
+    def test_process_html_snapshots_should_ignore_non_snapshot_assets(self):
+        bookmark = self.setup_bookmark()
+        self.setup_asset(
+            bookmark,
+            asset_type=BookmarkAsset.TYPE_UPLOAD,
+            status=BookmarkAsset.STATUS_PENDING,
+        )
+
+        tasks._process_html_snapshots_task()
+
+        self.mock_assets_create_snapshot.assert_not_called()
+
+    @override_settings(LD_ENABLE_SNAPSHOTS=True)
+    def test_process_html_snapshots_should_continue_after_error(self):
+        bookmark = self.setup_bookmark()
+        first_asset = self.setup_asset(bookmark, status=BookmarkAsset.STATUS_PENDING)
+        second_asset = self.setup_asset(bookmark, status=BookmarkAsset.STATUS_PENDING)
+
+        def create_snapshot(asset):
+            if asset.id == first_asset.id:
+                self.fail_asset(asset)
+            else:
+                self.complete_asset(asset)
+
+        self.mock_assets_create_snapshot.side_effect = create_snapshot
+
+        tasks._process_html_snapshots_task()
+
+        self.assertEqual(
+            self.mock_assets_create_snapshot.call_args_list,
+            [mock.call(first_asset), mock.call(second_asset)],
+        )
+
+    @override_settings(LD_ENABLE_SNAPSHOTS=True)
+    def test_process_html_snapshots_should_not_run_in_parallel(self):
+        bookmark = self.setup_bookmark()
+        self.setup_asset(bookmark, status=BookmarkAsset.STATUS_PENDING)
+
+        with tasks._html_snapshot_lock:
+            tasks._process_html_snapshots_task()
+
+        self.mock_assets_create_snapshot.assert_not_called()
+
+    @override_settings(LD_ENABLE_SNAPSHOTS=True)
+    def test_process_html_snapshots_should_pick_up_assets_created_while_processing(
+        self,
+    ):
+        bookmark = self.setup_bookmark()
+        first_asset = self.setup_asset(bookmark, status=BookmarkAsset.STATUS_PENDING)
+        second_asset = None
+
+        def create_second_asset(asset):
+            nonlocal second_asset
+            if second_asset is None:
+                second_asset = self.setup_asset(
+                    bookmark, status=BookmarkAsset.STATUS_PENDING
+                )
+            self.complete_asset(asset)
+
+        self.mock_assets_create_snapshot.side_effect = create_second_asset
+
+        tasks._process_html_snapshots_task()
+
+        self.assertEqual(
+            self.mock_assets_create_snapshot.call_args_list,
+            [mock.call(first_asset), mock.call(second_asset)],
+        )
+
+    @override_settings(LD_ENABLE_SNAPSHOTS=True)
+    def test_process_html_snapshots_should_pick_up_assets_created_before_releasing_lock(
+        self,
+    ):
+        bookmark = self.setup_bookmark()
+        first_asset = self.setup_asset(bookmark, status=BookmarkAsset.STATUS_PENDING)
+        second_asset = None
+        get_next_pending_asset = tasks._get_next_pending_asset
+
+        def get_next_pending_asset_and_create_asset():
+            nonlocal second_asset
+            asset = get_next_pending_asset()
+            # Simulate an asset being created after the task has determined
+            # that there are no more pending assets, but before it releases the
+            # lock. The task triggered for that asset is dropped by the lock, so
+            # the running task has to pick it up after releasing the lock.
+            if asset is None and second_asset is None:
+                second_asset = self.setup_asset(
+                    bookmark, status=BookmarkAsset.STATUS_PENDING
+                )
+            return asset
+
+        with mock.patch.object(
+            tasks, "_get_next_pending_asset", get_next_pending_asset_and_create_asset
+        ):
+            tasks._process_html_snapshots_task()
+
+        self.assertEqual(
+            self.mock_assets_create_snapshot.call_args_list,
+            [mock.call(first_asset), mock.call(second_asset)],
+        )
 
     @override_settings(LD_ENABLE_SNAPSHOTS=False)
     def test_create_html_snapshot_should_not_create_asset_when_single_file_is_disabled(
@@ -658,3 +796,52 @@ class BookmarkTasksTestCase(TestCase, BookmarkFactoryMixin):
 
         self.assertEqual(count, 3)
         self.assertEqual(BookmarkAsset.objects.count(), count)
+
+    @override_settings(LD_DISABLE_BACKGROUND_TASKS=True)
+    def test_refresh_metadata_task_not_called_when_background_tasks_disabled(self):
+        bookmark = self.setup_bookmark()
+        with mock.patch(
+            "bookmarks.services.tasks._refresh_metadata_task"
+        ) as mock_refresh_metadata_task:
+            tasks.refresh_metadata(bookmark)
+            mock_refresh_metadata_task.assert_not_called()
+
+    @override_settings(LD_DISABLE_BACKGROUND_TASKS=False)
+    def test_refresh_metadata_task_called_when_background_tasks_enabled(self):
+        bookmark = self.setup_bookmark()
+        with mock.patch(
+            "bookmarks.services.tasks._refresh_metadata_task"
+        ) as mock_refresh_metadata_task:
+            tasks.refresh_metadata(bookmark)
+            mock_refresh_metadata_task.assert_called_once()
+
+    def test_refresh_metadata_task_should_handle_missing_bookmark(self):
+        with mock.patch(
+            "bookmarks.services.website_loader.load_website_metadata"
+        ) as mock_load_website_metadata:
+            tasks._refresh_metadata_task(123)
+
+            mock_load_website_metadata.assert_not_called()
+
+    def test_refresh_metadata_updates_title_description(self):
+        bookmark = self.setup_bookmark(
+            title="Initial title",
+            description="Initial description",
+        )
+        mock_website_metadata = WebsiteMetadata(
+            url=bookmark.url,
+            title="New title",
+            description="New description",
+            preview_image=None,
+        )
+
+        with mock.patch(
+            "bookmarks.services.tasks.load_website_metadata"
+        ) as mock_load_website_metadata:
+            mock_load_website_metadata.return_value = mock_website_metadata
+
+            tasks.refresh_metadata(bookmark)
+
+            bookmark.refresh_from_db()
+            self.assertEqual(bookmark.title, "New title")
+            self.assertEqual(bookmark.description, "New description")

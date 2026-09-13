@@ -1,69 +1,41 @@
-import gzip
-import os
-
-from django.conf import settings
-from django.http import (
-    HttpResponse,
-    Http404,
-)
+from django.http import Http404
 from django.shortcuts import render
 
-from bookmarks.models import BookmarkAsset
-
-
-def _access_asset(request, asset_id: int):
-    try:
-        asset = BookmarkAsset.objects.get(pk=asset_id)
-    except BookmarkAsset.DoesNotExist:
-        raise Http404("Asset does not exist")
-
-    bookmark = asset.bookmark
-    is_owner = bookmark.owner == request.user
-    is_shared = (
-        request.user.is_authenticated
-        and bookmark.shared
-        and bookmark.owner.profile.enable_sharing
-    )
-    is_public_shared = bookmark.shared and bookmark.owner.profile.enable_public_sharing
-
-    if not is_owner and not is_shared and not is_public_shared:
-        raise Http404("Bookmark does not exist")
-
-    return asset
-
-
-def _get_asset_content(asset):
-    filepath = os.path.join(settings.LD_ASSET_FOLDER, asset.file)
-
-    if not os.path.exists(filepath):
-        raise Http404("Asset file does not exist")
-
-    if asset.gzip:
-        with gzip.open(filepath, "rb") as f:
-            content = f.read()
-    else:
-        with open(filepath, "rb") as f:
-            content = f.read()
-
-    return content
+from bookmarks.services import assets
+from bookmarks.views import access
 
 
 def view(request, asset_id: int):
-    asset = _access_asset(request, asset_id)
-    content = _get_asset_content(asset)
+    asset = access.asset_read(request, asset_id)
+    try:
+        response = assets.stream_asset_file(asset)
+    except FileNotFoundError:
+        raise Http404("Asset file does not exist") from None
 
-    return HttpResponse(content, content_type=asset.content_type)
+    response["Content-Disposition"] = f'inline; filename="{asset.download_name}"'
+    if asset.content_type and asset.content_type.startswith("video/"):
+        response["Content-Security-Policy"] = "default-src 'none'; media-src 'self';"
+    elif asset.content_type == "application/pdf":
+        response["Content-Security-Policy"] = "default-src 'none'; object-src 'self';"
+    else:
+        response["Content-Security-Policy"] = "sandbox allow-scripts"
+    return response
 
 
 def read(request, asset_id: int):
-    asset = _access_asset(request, asset_id)
-    content = _get_asset_content(asset)
-    content = content.decode("utf-8")
+    asset = access.asset_read(request, asset_id)
+    try:
+        with assets.open_asset_file(asset) as file:
+            content = file.read().decode("utf-8")
+    except FileNotFoundError:
+        raise Http404("Asset file does not exist") from None
 
-    return render(
+    response = render(
         request,
         "bookmarks/read.html",
         {
             "content": content,
         },
     )
+    response["Content-Security-Policy"] = "sandbox allow-scripts"
+    return response
